@@ -13,7 +13,7 @@ namespace ota
 		ESP32OTAPull ota;
 		ota.SetCallback(callback);
 		Serial.println("Checking update");
-		int ret = ota.CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", "0.0.0");
+		int ret = ota.CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION);
 		Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));
     }
 
