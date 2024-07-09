@@ -27,8 +27,9 @@ void readValues();
 void setup() {
   Serial.begin(115200);
   while(!Serial);
-  Serial.print("Board:");
-  Serial.println(ARDUINO_BOARD);
+  Serial.printf("Board: %s", ARDUINO_BOARD);
+  Serial.printf("Version: %s", PROGRAM_VERSION);
+
 
   ntp::initNTP();
   sunriseH::initCo2Sensor();
