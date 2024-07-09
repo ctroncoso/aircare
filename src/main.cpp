@@ -27,6 +27,8 @@ void readValues();
 void setup() {
   Serial.begin(115200);
   while(!Serial);
+  Serial.print("Board:");
+  Serial.println(ARDUINO_BOARD);
 
   ntp::initNTP();
   sunriseH::initCo2Sensor();

@@ -31,6 +31,8 @@ namespace wifi{
             Serial.print(".");
         }
         Serial.println("");
-        Serial.println("Connected.");        
+        Serial.println("Connected.");   
+        Serial.print("MAC:");
+        Serial.println(WiFi.macAddress());
     }
 }
