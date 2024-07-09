@@ -47,12 +47,13 @@ void loop() {
 
     readValues();
     printValues();
-    ntp::printLocalTime();     // it will take some time to sync time :)
-    Serial.println(ntp::getTime());
+    // ntp::printLocalTime();     // it will take some time to sync time :)
+    // Serial.println(ntp::getTime());
     mqtt::mqttPublish();
-    leds::trigger_leds();
+    leds::trigger_leds(sunriseH::co2_fc);
   }
 
+  // check for updates and install.
   if(currentTime - previousTimer_2 >= updateDelay){
     previousTimer_2 = currentTime;
     ota::checkUpdate();
