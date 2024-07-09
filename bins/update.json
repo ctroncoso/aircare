@@ -4,7 +4,7 @@
 		"Board": "ESP32_DEV",
 		"Device": "C8:F0:9E:9E:38:40",
 		"Version": "1.0.0",
-		"URL": "https://example.com/myimages/Basic-OTA-Example.bin"
+		"URL": "https://github.com/ctroncoso/aircare/raw/main/bins/firmware.v.1.0.0.bin"
 		}
 	]
 }
