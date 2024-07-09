@@ -27,8 +27,8 @@ void readValues();
 void setup() {
   Serial.begin(115200);
   while(!Serial);
-  Serial.printf("Board: %s", ARDUINO_BOARD);
-  Serial.printf("Version: %s", PROGRAM_VERSION);
+  Serial.printf("Board: %s \n", ARDUINO_BOARD);
+  Serial.printf("Version: %s \n", PROGRAM_VERSION);
 
 
   ntp::initNTP();
