@@ -30,6 +30,8 @@ void setup() {
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
   Serial.printf("Version: %s \n", PROGRAM_VERSION);
 
+  wifi::printMac();
+
 
   ntp::initNTP();
   sunriseH::initCo2Sensor();
