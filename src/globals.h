@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION    "1.0.3" 
+#define PROGRAM_VERSION    "1.0.4" 
 
 const unsigned long measurementDelay = 60000;
 const unsigned long updateDelay = 60000*10; // 10 minute delay between update check

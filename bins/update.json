@@ -3,8 +3,8 @@
 		{
 		"Board": "Espressif ESP32 Dev Module",
 		"Device": "C8:F0:9E:9E:38:40",
-		"Version": "1.0.3",
-		"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.0.3.bin"
+		"Version": "1.0.4",
+		"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.0.4.bin"
 		}
 	]
 }
