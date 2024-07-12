@@ -56,7 +56,7 @@ void loop() {
     // ntp::printLocalTime();     // it will take some time to sync time :)
     // Serial.println(ntp::getTime());
     mqtt::mqttPublish();
-    leds::trigger_leds(co2_State);
+    leds::setLedOnCO2Condition(co2_State);
   }
 
   // check for updates and install.

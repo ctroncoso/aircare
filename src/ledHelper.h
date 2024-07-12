@@ -12,7 +12,7 @@ namespace leds{
         pinMode(ledPinG, OUTPUT);    
     }
 
-    void trigger_leds(CO2_Condition co2_State){
+    void setLedOnCO2Condition(CO2_Condition co2_State){
         u_int8_t riskLevel;
         digitalWrite(ledPinR, LOW);
         digitalWrite(ledPinY, LOW);
