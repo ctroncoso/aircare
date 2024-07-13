@@ -7,7 +7,7 @@
 namespace mqtt{
     const char* mqtt_server = "52.23.110.164";
 
-    PubSubClient client(wifi::espClient);  //mqtt 
+    PubSubClient client(espClient);  //mqtt 
 
     void mqttreconnect();
     void mqttPublish();

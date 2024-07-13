@@ -1,5 +1,4 @@
 #include "globals.h"
-#include "wifiHelper.h"
 #include "ntpHelper.h"
 #include "sunriseHelper.h"
 #include "bmeHelper.h"
@@ -29,15 +28,29 @@ void setup() {
   while(!Serial);
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
   Serial.printf("Version: %s \n", PROGRAM_VERSION);
+  Serial.print("MAC: ");
+  Serial.println( String(WiFi.macAddress()));
 
-  wifi::printMac();
+  bool res = wm.autoConnect(); // password protected ap
+
+  if(!res) {
+      Serial.println("Failed to connect. Waiting 3 minutes and restarting.");
+      delay(180000);  // wait 3 minutes
+      ESP.restart();
+  } 
+  else {
+      //if you get here you have connected to the WiFi    
+      Serial.println("connected...yeey :)");
+  }
+
+
+//  wifi::initWifi();
 
 
   ntp::initNTP();
   sunriseH::initCo2Sensor();
   bme::initBME();
   leds::initLEDS();  //in globals.h
-  wifi::initWifi();
   mqtt::initMQTT();
     
 

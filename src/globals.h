@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <WiFiManager.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 #define PROGRAM_VERSION    "1.0.0" 
@@ -22,3 +23,5 @@ char serializedString[200];
 enum class CO2_Condition { Green, Yellow, Red};
 CO2_Condition co2_State;
 
+WiFiClient espClient;
+WiFiManager wm;
