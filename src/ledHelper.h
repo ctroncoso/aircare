@@ -6,10 +6,16 @@
 
 
 namespace leds{
+    void initLEDS();
+    void clearLeds();
+    void setLedOnCO2Condition(CO2_Condition co2_State);
+    void blinkLed(int led, int count);
+
     void initLEDS(){
         pinMode(ledPinR, OUTPUT);
         pinMode(ledPinY, OUTPUT);
         pinMode(ledPinG, OUTPUT);    
+        clearLeds();
     }
 
     void clearLeds(){
