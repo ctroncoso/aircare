@@ -31,7 +31,8 @@ void setup() {
   Serial.print("MAC: ");
   Serial.println( String(WiFi.macAddress()));
 
-  bool res = wm.autoConnect(); // password protected ap
+  wm.setConfigPortalTimeout(PORTAL_TIMEOUT);
+  bool res = wm.autoConnect(); 
 
   if(!res) {
       Serial.println("Failed to connect. Waiting 3 minutes and restarting.");
