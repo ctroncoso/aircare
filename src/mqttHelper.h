@@ -42,7 +42,13 @@ namespace mqtt{
                 delay(5000);
                 attempts--;
             }
-            if (attempts == 0) ESP.restart();
+            if (attempts == 0) {
+                for (int i = 0; i < 3; i++) {
+                    leds::blinkLed(ledPinR,2);
+                    delay(500);
+                }
+                ESP.restart();
+            }
         }
     }    
 }
