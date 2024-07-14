@@ -41,6 +41,10 @@ void setup() {
 
   if(!res) {
       Serial.println("Failed to connect. Waiting 3 minutes and restarting.");
+      for (int i = 0; i <= 3; i++) {
+        leds::blinkLed(ledPinR,2);
+        delay(500);
+      }
       delay(180000);  // wait 3 minutes
       ESP.restart();
   } 
