@@ -26,6 +26,9 @@ unsigned long previousTimer_2 = 0;
 void setup() {
   leds::initLEDS();  //in globals.h
   co2_State = CO2_Condition::Unknown;
+  pinMode(0, INPUT_PULLUP);
+
+
   Serial.begin(115200);
   while(!Serial);
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
@@ -79,6 +82,13 @@ void loop() {
     previousTimer_2 = currentTime;
     ota::checkUpdate();
   }
-  
-}
 
+  if ( digitalRead(0) == LOW ) {
+    delay(4000);
+    if ( digitalRead(0) == LOW ) {
+      Serial.println("Portal Triggered...");
+      wm.startConfigPortal(PORTAL_NAME);
+      ESP.restart();
+    }
+  }
+}
