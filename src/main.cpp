@@ -21,7 +21,7 @@ unsigned long previousTimer_1 = 0;
 unsigned long previousTimer_2 = 0;
 
 
-
+void configModeCallback(WiFiManager *wm);
 
 void setup() {
   leds::initLEDS();  //in globals.h
@@ -36,6 +36,9 @@ void setup() {
   Serial.print("MAC: ");
   Serial.println( String(WiFi.macAddress()));
 
+ 
+
+  wm.setAPCallback(configModeCallback);
   wm.setConfigPortalTimeout(PORTAL_TIMEOUT);
   bool res = wm.autoConnect(PORTAL_NAME); 
 
@@ -95,4 +98,8 @@ void loop() {
       ESP.restart();
     }
   }
+}
+
+void configModeCallback(WiFiManager *wm) {
+  leds::blinkLed(ledPinG, 4);
 }
