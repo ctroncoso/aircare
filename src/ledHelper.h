@@ -37,4 +37,16 @@ namespace leds{
             break;
         }
     }    
+
+    void blinkLed(int led, int count){
+        clearLeds();
+        while(count != 0){
+            digitalWrite(led,HIGH);
+            delay(100);
+            digitalWrite(led,LOW);
+            delay(100);
+            count--;
+        }
+        setLedOnCO2Condition(co2_State);
+    }
 }
