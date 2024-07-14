@@ -24,6 +24,8 @@ unsigned long previousTimer_2 = 0;
 
 
 void setup() {
+  leds::initLEDS();  //in globals.h
+  co2_State = CO2_Condition::Unknown;
   Serial.begin(115200);
   while(!Serial);
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
@@ -51,7 +53,6 @@ void setup() {
   ntp::initNTP();
   sunriseH::initCo2Sensor();
   bme::initBME();
-  leds::initLEDS();  //in globals.h
   mqtt::initMQTT();
     
 
