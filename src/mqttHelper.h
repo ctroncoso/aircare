@@ -27,20 +27,22 @@ namespace mqtt{
 
     /// @brief Mqtt connect/reconnect
     void mqttreconnect() {
-    // Loop hasta lograr conexión
-    while (!client.connected()) {
-        Serial.print("Attempting MQTT connection...");
-        // ID de cliente con string random
-        String clientId = "ESP32Client-";
-        clientId += String(random(0xffff), HEX);
-        // probar conexión
-        if (client.connect(clientId.c_str())) {
-        Serial.println("connected");
-        } else {
-        Serial.print("failed, rc=");
-        Serial.print(client.state());
-        delay(5000);
+        // Loop hasta lograr conexión
+        u_int8_t attempts = 120;
+        while (!client.connected()) {
+            Serial.print("Attempting MQTT connection...");
+            // ID de cliente con string random
+            String clientId = "ESP32Client-";
+            clientId += String(random(0xffff), HEX);
+            // probar conexión
+            if (client.connect(clientId.c_str())) {
+                Serial.println("connected");
+            } else {
+                Serial.printf("failed, rc=%d, attempts left =%d",client.state(), attempts);
+                delay(5000);
+                attempts--;
+            }
+            if (attempts == 0) ESP.restart();
         }
-    }
     }    
 }
