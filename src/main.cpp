@@ -6,9 +6,8 @@
 #include "mqttHelper.h"
 #include "otaHelper.h"
 #include "mainHelper.h"
+#include "wifiManagerHelper.h"
 
-#include <ArduinoJson.h>
-#include <WiFi.h>
 
 #include "ESP32OTAPull.h"
 
