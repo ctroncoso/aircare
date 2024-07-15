@@ -31,11 +31,6 @@ void setup() {
   co2_State = CO2_Condition::Unknown;
   pinMode(0, INPUT_PULLUP);
 
-  WiFiManagerParameter custom_text("<p>This is just a text paragraph</p>");
-  wm.addParameter(&custom_text);
-
-
-
   
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
   Serial.printf("Version: %s \n", PROGRAM_VERSION);
