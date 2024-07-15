@@ -1,7 +1,6 @@
 #pragma once
 
 #include "globals.h"
-#include "wifiHelper.h"
 #include <PubSubClient.h>
 
 namespace mqtt{

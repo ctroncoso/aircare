@@ -2,7 +2,6 @@
 
 #include "globals.h"
 #include "ntpHelper.h"
-#include "wifiHelper.h"
 #include "bmeHelper.h"
 #include "sunriseHelper.h"
 
