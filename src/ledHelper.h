@@ -23,6 +23,7 @@ namespace leds{
         digitalWrite(ledPinY, LOW);
         digitalWrite(ledPinG, LOW);
     }
+    
     void setLedOnCO2Condition(CO2_Condition co2_State){
         u_int8_t riskLevel;
         clearLeds();
