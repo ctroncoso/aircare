@@ -23,7 +23,7 @@ JsonDocument doc;
 char serializedString[200];
 
 enum class CO2_Condition { Green, Yellow, Red, Unknown };
-CO2_Condition co2_State;
+CO2_Condition co2_State=CO2_Condition::Unknown;
 
 WiFiClient espClient;
 WiFiManager wm;
