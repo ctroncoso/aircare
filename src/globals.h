@@ -5,14 +5,15 @@
 #include <WiFiManager.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION    "1.2.5" 
+#define PROGRAM_VERSION    "1.2.4" 
 #define CO2_LOW (700)
 #define CO2_HIGH (800)
 #define PORTAL_NAME "AIRCARE"
 #define PORTAL_TIMEOUT (180) // Timeout in seconds
+#define ONE_MIN (60000) ///   one minte in ms
 
-const unsigned long measurementDelay = 60000;
-const unsigned long updateDelay = 60000*10; // 10 minute delay between update check
+const unsigned long measurementDelay = ONE_MIN;
+const unsigned long updateDelay = ONE_MIN * 10; // 10 minute delay between update check
 
 
 const int ledPinR = 25;

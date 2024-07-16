@@ -41,7 +41,7 @@ namespace leds{
             digitalWrite(led,HIGH);
             delay(100);
             digitalWrite(led,LOW);
-            delay(100);
+            delay(200);
             count--;
         }
         if (restoreCondition) setLedOnCO2Condition(co2_State);
