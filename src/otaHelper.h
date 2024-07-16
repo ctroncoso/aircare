@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include "ESP32OTAPull.h"
+#include "ledHelper.h"
 
 
 namespace ota
@@ -23,6 +24,7 @@ namespace ota
 	void callback(int offset, int totallength)
 	{
 		Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
+		leds::blinkLed(ledPinR, 1);
 		// static int status = LOW;
 		// status = status == LOW && offset < totallength ? HIGH : LOW;
 		// digitalWrite(LED_BUILTIN, status);
