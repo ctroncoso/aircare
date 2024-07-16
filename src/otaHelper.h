@@ -14,10 +14,19 @@ namespace ota
 		ESP32OTAPull ota;
 		ota.SetCallback(callback);
 		Serial.println("Checking update");
-		int ret = ota
+		int ret;
+		ret = ota
 					.AllowDowngrades(true)
-					.CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION);
-		Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));
+					.CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION, ESP32OTAPull::DONT_DO_UPDATE);
+		// check if update (or downgrade) exists. Download and reboot. 
+		if (ret == ESP32OTAPull::UPDATE_AVAILABLE){
+			leds::clearLeds;
+			Serial.println("Update found. Downloading & installing.");
+			ret = ota
+						.AllowDowngrades(true)
+						.CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION);
+			Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));			
+		}
     }
 
 
