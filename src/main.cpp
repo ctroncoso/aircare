@@ -24,10 +24,14 @@ void setup() {
   Serial.begin(115200);
   while(!Serial);
 
+
   leds::initLEDS();  //in globals.h
   co2_State = CO2_Condition::Unknown;
   pinMode(0, INPUT_PULLUP);
 
+  leds::clearLeds();
+  leds::blinkLed(ledPinG, 3);
+  leds::clearLeds();
   
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
   Serial.printf("Version: %s \n", PROGRAM_VERSION);
@@ -41,6 +45,10 @@ void setup() {
   sunriseH::initCo2Sensor();
   bme::initBME();
   mqtt::initMQTT();
+  
+  
+  
+
     
 }
 

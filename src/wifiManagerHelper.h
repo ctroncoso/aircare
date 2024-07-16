@@ -7,7 +7,7 @@
 namespace wifiM{
 
     void configModeCallback(WiFiManager *wm) {
-        leds::blinkLed(ledPinG, 4);
+        leds::blinkLed(ledPinG, 4, true);
     }
 
     void initWifiM(){

@@ -9,7 +9,7 @@ namespace leds{
     void initLEDS();
     void clearLeds();
     void setLedOnCO2Condition(CO2_Condition co2_State);
-    void blinkLed(int led, int count);
+    void blinkLed(int led, int count, bool restoreCondition=true);
 
     void initLEDS(){
         pinMode(ledPinR, OUTPUT);
@@ -35,7 +35,7 @@ namespace leds{
         }
     }    
 
-    void blinkLed(int led, int count){
+    void blinkLed(int led, int count, bool restoreCondition){
         clearLeds();
         while(count != 0){
             digitalWrite(led,HIGH);
@@ -44,7 +44,7 @@ namespace leds{
             delay(100);
             count--;
         }
-        setLedOnCO2Condition(co2_State);
+        if (restoreCondition) setLedOnCO2Condition(co2_State);
     }
 
     void flipLed(int led){
