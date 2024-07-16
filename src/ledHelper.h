@@ -46,4 +46,8 @@ namespace leds{
         }
         setLedOnCO2Condition(co2_State);
     }
+
+    void flipLed(int led){
+        digitalWrite(led, !digitalRead(led));
+    }
 }

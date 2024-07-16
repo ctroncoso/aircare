@@ -24,7 +24,7 @@ namespace ota
 	void callback(int offset, int totallength)
 	{
 		Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
-		leds::blinkLed(ledPinR, 1);
+		leds::flipLed(ledPinR);
 		// static int status = LOW;
 		// status = status == LOW && offset < totallength ? HIGH : LOW;
 		// digitalWrite(LED_BUILTIN, status);
