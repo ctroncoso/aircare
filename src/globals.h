@@ -5,7 +5,7 @@
 #include <WiFiManager.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION    "1.1.1" 
+#define PROGRAM_VERSION    "1.2.0" 
 #define CO2_LOW (700)
 #define CO2_HIGH (800)
 #define PORTAL_NAME "AIRCARE"
@@ -27,3 +27,7 @@ CO2_Condition co2_State=CO2_Condition::Unknown;
 
 WiFiClient espClient;
 WiFiManager wm;
+
+
+unsigned long previousTimer_1 = 0;
+unsigned long previousTimer_2 = 0;

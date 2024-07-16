@@ -16,8 +16,6 @@ int alarm_level = 0;
 
 
 
-unsigned long previousTimer_1 = 0;
-unsigned long previousTimer_2 = 0;
 
 
 void configModeCallback(WiFiManager *wm);
@@ -44,30 +42,15 @@ void setup() {
   bme::initBME();
   mqtt::initMQTT();
     
-
 }
 
 void loop() { 
   unsigned long currentTime = millis();
 
-  // take and publish measurements
-  if(currentTime - previousTimer_1 >= measurementDelay){
-    previousTimer_1 = currentTime;
-
-    readValues();
-    co2_State = getCO2_State(sunriseH::co2_fc);
-    printValues();
-    // ntp::printLocalTime();     // it will take some time to sync time :)
-    // Serial.println(ntp::getTime());
-    mqtt::mqttPublish();
-    leds::setLedOnCO2Condition(co2_State);
-  }
+  measurementTick();
 
   // check for updates and install.
-  if(currentTime - previousTimer_2 >= updateDelay){
-    previousTimer_2 = currentTime;
-    ota::checkUpdate();
-  }
+  updateTick();
 
   if ( digitalRead(0) == LOW ) {
     delay(4000);

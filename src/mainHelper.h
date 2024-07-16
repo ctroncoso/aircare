@@ -58,3 +58,39 @@ String state2string(){
   default: return "";
   }
 }
+
+/**
+ * @brief Measurement cycle function.
+ * 
+ * This function is triggered every <measurementDelay>
+ * Place all your measuremen and reporting rutines in this block 
+ * in the order they are to be executed. 
+ */
+void measurementTick(){
+    unsigned long currentTime = millis();
+  if(currentTime - previousTimer_1 >= measurementDelay){
+    previousTimer_1 = currentTime;
+
+    readValues();
+    co2_State = getCO2_State(sunriseH::co2_fc);
+    printValues();
+    // ntp::printLocalTime();     // it will take some time to sync time :)
+    // Serial.println(ntp::getTime());
+    mqtt::mqttPublish();
+    leds::setLedOnCO2Condition(co2_State);
+  }
+
+}
+/**
+ * @brief Update cycle funtion.
+ * 
+ * This function is triggered every <updateDelay>
+ * 
+ */
+void updateTick(){
+  unsigned long currentTime = millis();
+  if(currentTime - previousTimer_2 >= updateDelay){
+    previousTimer_2 = currentTime;
+    ota::checkUpdate();
+  }
+}
