@@ -7,18 +7,32 @@
 #include "otaHelper.h"
 #include "mainHelper.h"
 #include "wifiManagerHelper.h"
-
+#include "OneButton.h"
 
 #include "ESP32OTAPull.h"
 
 // threat condition
 int alarm_level = 0;
+OneButton button(GPIO_NUM_0);
 
+void handleMultiClick() {
+  int clicks = button.getNumberClicks();
+  switch (clicks)
+  {
+  case 3:
+    Serial.println("starting OTA");
+    ota::checkUpdate();
+    break;
+  default:
+    break;
+  }
+  Serial.println(clicks);
 
-
+}
 
 
 void configModeCallback(WiFiManager *wm);
+void startWifiPortal();
 
 void setup() {
   Serial.begin(115200);
@@ -27,11 +41,11 @@ void setup() {
 
   leds::initLEDS();  //in globals.h
   co2_State = CO2_Condition::Unknown;
-  pinMode(0, INPUT_PULLUP);
+  button.attachDoubleClick(startWifiPortal);
+  button.attachMultiClick(handleMultiClick);
+  //button.attachMultiClick(ota::checkUpdate,)
 
-  leds::clearLeds();
-  leds::blinkLed(ledPinG, 3);
-  leds::clearLeds();
+
   
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
   Serial.printf("Version: %s \n", PROGRAM_VERSION);
@@ -53,6 +67,7 @@ void setup() {
 }
 
 void loop() { 
+  button.tick();
   unsigned long currentTime = millis();
 
   measurementTick();
@@ -60,12 +75,11 @@ void loop() {
   // check for updates and install.
   updateTick();
 
-  if ( digitalRead(0) == LOW ) {
-    delay(4000);
-    if ( digitalRead(0) == LOW ) {
-      Serial.println("Portal Triggered...");
-      wm.startConfigPortal(PORTAL_NAME);
-      ESP.restart();
-    }
-  }
 }
+
+void startWifiPortal(){
+  Serial.println("Portal Triggered...");
+  wm.startConfigPortal(PORTAL_NAME);
+  ESP.restart();
+}
+

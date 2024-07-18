@@ -7,6 +7,7 @@
 
 namespace leds{
     void initLEDS();
+    void POSTBlinks();
     void clearLeds();
     void setLedOnCO2Condition(CO2_Condition co2_State);
     void blinkLed(int led, int count, bool restoreCondition=true);
@@ -14,7 +15,8 @@ namespace leds{
     void initLEDS(){
         pinMode(ledPinR, OUTPUT);
         pinMode(ledPinY, OUTPUT);
-        pinMode(ledPinG, OUTPUT);    
+        pinMode(ledPinG, OUTPUT);
+        POSTBlinks();
         clearLeds();
     }
 
@@ -49,5 +51,13 @@ namespace leds{
 
     void flipLed(int led){
         digitalWrite(led, !digitalRead(led));
+    }
+
+    void POSTBlinks(){
+        leds::clearLeds();
+        leds::blinkLed(ledPinR, 2);
+        leds::blinkLed(ledPinY, 2);
+        leds::blinkLed(ledPinG, 2);
+        leds::clearLeds();
     }
 }
