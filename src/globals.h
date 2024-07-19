@@ -20,8 +20,8 @@ const int ledPinR = 25;
 const int ledPinY = 26;
 const int ledPinG = 27;
 
-const int rlPin1 = 34;
-const int rlPin2 = 35;
+const int rlPin1 = 32;
+const int rlPin2 = 33;
 
 
 JsonDocument doc;
