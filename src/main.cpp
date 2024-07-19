@@ -40,6 +40,18 @@ void setup() {
 
 
   leds::initLEDS();  //in globals.h
+
+  pinMode(rlPin1, OUTPUT);
+  pinMode(rlPin2, OUTPUT);
+
+  digitalWrite(rlPin1,LOW);
+  digitalWrite(rlPin2, LOW);
+
+  delay(10000);
+
+  digitalWrite(rlPin1,HIGH);
+  digitalWrite(rlPin2, HIGH);
+
   co2_State = CO2_Condition::Unknown;
   button.attachDoubleClick(startWifiPortal);
   button.attachMultiClick(handleMultiClick);

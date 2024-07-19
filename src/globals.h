@@ -5,7 +5,7 @@
 #include <WiFiManager.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION    "1.0.1" 
+#define PROGRAM_VERSION    "1.0.5" 
 #define CO2_LOW (700)
 #define CO2_HIGH (800)
 #define PORTAL_NAME "AIRCARE"
@@ -19,6 +19,10 @@ const unsigned long updateDelay = ONE_MIN * 10; // 10 minute delay between updat
 const int ledPinR = 25;
 const int ledPinY = 26;
 const int ledPinG = 27;
+
+const int rlPin1 = 34;
+const int rlPin2 = 35;
+
 
 JsonDocument doc;
 char serializedString[200];
