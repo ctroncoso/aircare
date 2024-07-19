@@ -24,9 +24,10 @@ void handleMultiClick() {
     ota::checkUpdate();
     break;
   default:
+    Serial.println(clicks);
     break;
   }
-  Serial.println(clicks);
+
 
 }
 
@@ -44,13 +45,13 @@ void setup() {
   pinMode(rlPin1, OUTPUT);
   pinMode(rlPin2, OUTPUT);
 
-  digitalWrite(rlPin1,LOW);
-  digitalWrite(rlPin2, LOW);
+  digitalWrite(rlPin1,HIGH);
+  digitalWrite(rlPin2, HIGH);
 
   delay(10000);
 
-  digitalWrite(rlPin1,HIGH);
-  digitalWrite(rlPin2, HIGH);
+  digitalWrite(rlPin1,LOW);
+  digitalWrite(rlPin2, LOW);
 
   co2_State = CO2_Condition::Unknown;
   button.attachDoubleClick(startWifiPortal);
@@ -71,11 +72,6 @@ void setup() {
   sunriseH::initCo2Sensor();
   bme::initBME();
   mqtt::initMQTT();
-  
-  
-  
-
-    
 }
 
 void loop() { 
