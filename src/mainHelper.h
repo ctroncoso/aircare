@@ -13,6 +13,7 @@ void printValues();
 void readValues();
 CO2_Condition getCO2_State(uint16_t co2_level);
 String state2string();
+void testRelay();
 
 
 void readValues(){
@@ -93,4 +94,15 @@ void updateTick(){
     previousTimer_2 = currentTime;
     ota::checkUpdate();
   }
+}
+
+void testRelay()
+{
+  digitalWrite(rlPin1, LOW);
+  digitalWrite(rlPin2, LOW);
+
+  delay(10000);
+
+  digitalWrite(rlPin1, HIGH);
+  digitalWrite(rlPin2, HIGH);
 }

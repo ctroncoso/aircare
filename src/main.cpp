@@ -39,19 +39,6 @@ void setup()
   while (!Serial)
     ;
 
-  leds::initLEDS(); // in globals.h
-
-  pinMode(rlPin1, OUTPUT);
-  pinMode(rlPin2, OUTPUT);
-
-  digitalWrite(rlPin1, HIGH);
-  digitalWrite(rlPin2, HIGH);
-
-  delay(10000);
-
-  digitalWrite(rlPin1, LOW);
-  digitalWrite(rlPin2, LOW);
-
   co2_State = CO2_Condition::Unknown;
   button.attachDoubleClick(startWifiPortal);
   button.attachMultiClick(handleMultiClick);
@@ -62,23 +49,29 @@ void setup()
   Serial.print("MAC: ");
   Serial.println(String(WiFi.macAddress()));
 
-  wifiM::initWifiM();
+  wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
+  ntp::initNTP();                   // Sinchronize time and date
+  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
+  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
+  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
+  leds::initLEDS(); // in globals.h
 
-  ntp::initNTP();
-  sunriseH::initCo2Sensor();
-  bme::initBME();
-  mqtt::initMQTT();
+  pinMode(rlPin1, OUTPUT);
+  pinMode(rlPin2, OUTPUT);
+
+
+  testRelay();
+
+
 }
 
 void loop()
 {
-  button.tick();
   unsigned long currentTime = millis();
 
+  button.tick();
   measurementTick();
-
-  // check for updates and install.
-  updateTick();
+  updateTick(); // check for updates and install.
 }
 
 void startWifiPortal()
