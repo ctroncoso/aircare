@@ -38,6 +38,10 @@ void setup()
   Serial.begin(115200);
   while (!Serial)
     ;
+  
+  #ifdef DEBUG
+    Serial.println("--- DEBUG ENABLED");
+  #endif
 
   co2_State = CO2_Condition::Unknown;
   button.attachDoubleClick(startWifiPortal);
