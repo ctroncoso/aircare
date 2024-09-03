@@ -41,9 +41,9 @@ namespace leds{
         clearLeds();
         while(count != 0){
             digitalWrite(led,HIGH);
-            delay(100);
+            delay(150);
             digitalWrite(led,LOW);
-            delay(200);
+            delay(250);
             count--;
         }
         if (restoreCondition) setLedOnCO2Condition(co2_State);
