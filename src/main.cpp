@@ -53,18 +53,35 @@ void setup()
   Serial.print("MAC: ");
   Serial.println(String(WiFi.macAddress()));
 
-  wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
-  ntp::initNTP();                   // Sinchronize time and date
-  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
-  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
-  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
   leds::initLEDS(); // in globals.h
 
+  wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
+  leds::blinkLed(ledPinY,1);
+  delay(1000);
+  
+  ntp::initNTP();                   // Sinchronize time and date
+  leds::blinkLed(ledPinY,2);
+  delay(1000);
+  
+  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
+  leds::blinkLed(ledPinY,3);
+  delay(1000);
+  
+  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
+  leds::blinkLed(ledPinY,4);
+  delay(1000);
+  
+  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
+  leds::blinkLed(ledPinY,5);
+  delay(1000);
+  
   pinMode(rlPin1, OUTPUT);
   pinMode(rlPin2, OUTPUT);
 
 
   testRelay();
+  leds::blinkLed(ledPinG,3);
+  delay(1000);
 
 
 }
