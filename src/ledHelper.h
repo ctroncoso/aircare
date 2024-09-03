@@ -16,7 +16,7 @@ namespace leds{
         pinMode(ledPinR, OUTPUT);
         pinMode(ledPinY, OUTPUT);
         pinMode(ledPinG, OUTPUT);
-        POSTBlinks();
+        // POSTBlinks();
         clearLeds();
     }
 
