@@ -44,7 +44,9 @@ void printValues() {
     doc["co2_fu"] = sunriseH::co2_fu;
     doc["co2_uu"] = sunriseH::co2_uu;
     doc["time"] = ntp::getTime();
+    doc["uptime"] = millis();
     doc["mac"] = WiFi.macAddress();
+    doc["fw"] = PROGRAM_VERSION ;
     serializeJson(doc, serializedString);
     Serial.println(serializedString);
     Serial.printf("Current State: %s \r\n", state2string());

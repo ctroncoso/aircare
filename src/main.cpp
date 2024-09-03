@@ -90,6 +90,7 @@ void loop()
 {
   unsigned long currentTime = millis();
 
+  
   button.tick();
   measurementTick();
   updateTick(); // check for updates and install.
