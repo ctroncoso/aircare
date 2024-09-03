@@ -29,7 +29,7 @@ void readValues(){
 }
 
 CO2_Condition getCO2_State(uint16_t co2_level){
-    if      (co2_level < CO2_LOW)     return CO2_Condition::Green;
+    if      (co2_level < CO2_LOW  )   return CO2_Condition::Green;
     else if (co2_level < CO2_HIGH )   return CO2_Condition::Yellow;
     else                              return CO2_Condition::Red;
 }
@@ -68,7 +68,7 @@ String state2string(){
  * in the order they are to be executed. 
  */
 void measurementTick(){
-    unsigned long currentTime = millis();
+  unsigned long currentTime = millis();
   if(currentTime - previousTimer_1 >= measurementDelay){
     previousTimer_1 = currentTime;
 
