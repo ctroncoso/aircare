@@ -14,6 +14,9 @@ namespace mqtt{
 
     void initMQTT(){
         client.setServer(mqtt_server, 1883);
+        if (!client.connected()) {
+            mqttreconnect();
+        }        
     }
 
     void mqttPublish(){
