@@ -81,7 +81,7 @@ void measurementTick(){
     int dow = dt.tm_wday;
     int hour = dt.tm_hour;
     int minute = dt.tm_min;
-    if (dow >=1 && dow <=5 && hour >= 11 && hour <= 23)
+    if (dow >=1 && dow <=5 && hour >= 11 && hour < 23)
     {
       Serial.println("fan and UV ACTIVATED");
       digitalWrite(rlPin1,LOW);  // turn on fan
