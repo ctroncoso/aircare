@@ -14,6 +14,7 @@ namespace ntp{
     const int   daylightOffset_sec = 0;
 
     unsigned long getTime();
+    struct tm getTM();
     void printLocalTime();
     void timeavailable(struct timeval *t);
     void setupNTP();
@@ -30,6 +31,12 @@ namespace ntp{
         time_t now;
         time(&now);
         return now;
+    }
+
+    struct tm getTM(){
+        struct tm timeinfo;
+        getLocalTime(&timeinfo);
+        return timeinfo;
     }
 
     void timeavailable(struct timeval *t)

@@ -46,6 +46,8 @@ void printValues() {
     doc["time"] = ntp::getTime();
     doc["uptime"] = millis();
     doc["mac"] = WiFi.macAddress();
+    doc["rl1"] = int(rl1State);
+    doc["rl2"] = int(rl2State);
     doc["fw"] = PROGRAM_VERSION ;
     serializeJson(doc, serializedString);
     Serial.println(serializedString);
@@ -73,6 +75,28 @@ void measurementTick(){
   unsigned long currentTime = millis();
   if(currentTime - previousTimer_1 >= measurementDelay){
     previousTimer_1 = currentTime;
+
+    // check if day is mon-fri between 7am and 7pm (time in UTC-4)
+    struct tm dt = ntp::getTM();
+    int dow = dt.tm_wday;
+    int hour = dt.tm_hour;
+    int minute = dt.tm_min;
+    if (dow >=1 && dow <=5 && hour >= 11 && hour <= 23)
+    {
+      Serial.println("fan and UV ACTIVATED");
+      digitalWrite(rlPin1,LOW);  // turn on fan
+      digitalWrite(rlPin2,LOW);  // turn on UV
+      rl1State=1;
+      rl2State=1;
+    } else {
+      Serial.println("fan and UV DEACTIVATED");
+      digitalWrite(rlPin1,HIGH);  // turn off fan
+      digitalWrite(rlPin2,HIGH);  // turn off UV
+      rl1State=0;
+      rl2State=0;
+    }
+      
+    
 
     readValues();
     co2_State = getCO2_State(sunriseH::co2_fc);

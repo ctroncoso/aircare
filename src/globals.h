@@ -5,7 +5,7 @@
 #include <WiFiManager.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION    "1.0.6" 
+#define PROGRAM_VERSION    "1.1.0" 
 //#define DEBUG
 #define CO2_LOW (700)
 #define CO2_HIGH (800)
@@ -24,9 +24,12 @@ const int ledPinG = 27;
 const int rlPin1 = 32;
 const int rlPin2 = 33;
 
+bool rl1State;
+bool rl2State;
+
 
 JsonDocument doc;
-char serializedString[200];
+char serializedString[300];
 
 enum class CO2_Condition { Green, Yellow, Red, Unknown };
 CO2_Condition co2_State=CO2_Condition::Unknown;
