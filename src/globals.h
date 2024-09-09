@@ -5,7 +5,7 @@
 #include <WiFiManager.h>
 
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION    "1.1.1" 
+#define PROGRAM_VERSION    "1.1.2" 
 //#define DEBUG
 #define CO2_LOW (700)
 #define CO2_HIGH (800)

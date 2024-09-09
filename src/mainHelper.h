@@ -16,6 +16,8 @@ String state2string();
 void testRelay();
 
 
+
+
 void readValues(){
     bme::temp     = bme::bme.readTemperature();
     bme::pressure = bme::bme.readPressure() / 100.0F;
@@ -76,12 +78,18 @@ void measurementTick(){
   if(currentTime - previousTimer_1 >= measurementDelay){
     previousTimer_1 = currentTime;
 
-    // check if day is mon-fri between 7am and 7pm (time in UTC-4)
+    // check if day is mon-fri between 8am and 6:30pm (time in UTC-3)
     struct tm dt = ntp::getTM();
     int dow = dt.tm_wday;
     int hour = dt.tm_hour;
     int minute = dt.tm_min;
-    if (dow >=1 && dow <=5 && hour >= 11 && hour < 23)
+    int hourmin = hour*100+minute;
+
+    Serial.print("DOW is: "); Serial.println(dow);
+    Serial.print("Hourmin is:"); Serial.println(hourmin);
+
+
+    if (dow >=1 && dow <=5 && hourmin >= 1100 && hourmin < 2130)
     {
       Serial.println("fan and UV ACTIVATED");
       digitalWrite(rlPin1,LOW);  // turn on fan
