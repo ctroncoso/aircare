@@ -111,7 +111,8 @@ void measurementTick(){
     printValues();
     // ntp::printLocalTime();     // it will take some time to sync time :)
     // Serial.println(ntp::getTime());
-    mqtt::mqttPublish();
+    mqtt::mqttPublish("/cleanair/sensor", serializedString); // serializedString
+
     leds::setLedOnCO2Condition(co2_State);
   }
 
