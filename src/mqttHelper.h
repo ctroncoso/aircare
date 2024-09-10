@@ -10,7 +10,7 @@ namespace mqtt
   PubSubClient client(espClient); // mqtt
 
   void mqttreconnect();
-  void mqttPublish();
+  void mqttPublish(const char* path, const char* content);
 
   void initMQTT()
   {
@@ -21,13 +21,13 @@ namespace mqtt
     }
   }
 
-  void mqttPublish()
+  void mqttPublish(const char* mq_path, const char* content)
   {
     if (!client.connected())
     {
       mqttreconnect();
     }
-    client.publish("/cleanair/sensor", serializedString);
+    client.publish(mq_path, content);
   }
 
   /// @brief Mqtt connect/reconnect
