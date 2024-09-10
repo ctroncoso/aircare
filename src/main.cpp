@@ -90,6 +90,8 @@ void setup()
   mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
   leds::blinkLed(ledPinY,5);
   delay(1000);
+
+  mqtt::mqttPublish("/cleanair/events", "Booting....test-rig"); 
   
   // set relay pins to output
   pinMode(rlPin1, OUTPUT);
