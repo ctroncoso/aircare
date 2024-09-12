@@ -48,7 +48,7 @@ namespace mqtt
       }
       else
       {
-        Serial.printf("failed, rc=%d, attempts left =%d", client.state(), attempts);
+        Serial.printf("failed, rc=%d, attempts left =%d\n", client.state(), attempts);
         delay(5000);
         attempts--;
       }
