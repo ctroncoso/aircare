@@ -60,38 +60,27 @@ void setup()
   leds::blinkLed(ledPinY,1);
   delay(1000);
 
-  ota::checkUpdate();               // Check for updates immediately
-  
-  ntp::initNTP();                   // Sinchronize time and date
+  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
   leds::blinkLed(ledPinY,2);
   delay(1000);
   
+  mqtt::mqttPublish("/cleanair/events", "Booting....test-rig"); 
 
-  // Serial.println("printing dow");
-  // struct tm dt = ntp::getTM();
-  // Serial.println(dt.tm_hour);
-
-  // delay(60000);
-
-
-
-
-
-
-
-  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
+  ota::checkUpdate();               // Check for updates immediately
+  
+  ntp::initNTP();                   // Sinchronize time and date
   leds::blinkLed(ledPinY,3);
   delay(1000);
-  
-  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
+
+  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
   leds::blinkLed(ledPinY,4);
   delay(1000);
   
-  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
+  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
   leds::blinkLed(ledPinY,5);
   delay(1000);
+  
 
-  mqtt::mqttPublish("/cleanair/events", "Booting....test-rig"); 
   
   // set relay pins to output
   pinMode(rlPin1, OUTPUT);
