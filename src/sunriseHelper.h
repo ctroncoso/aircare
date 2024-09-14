@@ -30,7 +30,7 @@ namespace sunriseH {
 
     while(co2sensor.readErrorStatus() >> 7){
       Serial.println("Esperando primera medicion...");  
-      delay(10000);
+      delay(500);
     }
   }
 }
