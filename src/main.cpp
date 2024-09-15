@@ -47,14 +47,13 @@ void setup()
   co2_State = CO2_Condition::Unknown;
   button.attachDoubleClick(startWifiPortal);
   button.attachMultiClick(handleMultiClick);
-  // button.attachMultiClick(ota::checkUpdate,)
 
   Serial.printf("Board: %s \n", ARDUINO_BOARD);
   Serial.printf("Version: %s \n", PROGRAM_VERSION);
   Serial.print("MAC: ");
   Serial.println(String(WiFi.macAddress()));
 
-  leds::initLEDS(); // in globals.h
+  leds::initLEDS();                 // in globals.h
 
   wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
   leds::blinkLed(ledPinY,1);
