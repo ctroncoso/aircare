@@ -9,6 +9,7 @@ namespace mqtt
 
   PubSubClient client(espClient); // mqtt
 
+  void initMQTT();
   void mqttreconnect();
   void mqttPublish(const char* path, const char* content);
 
