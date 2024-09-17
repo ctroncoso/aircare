@@ -12,9 +12,12 @@ namespace mqtt
   void initMQTT();
   void mqttreconnect();
   void mqttPublish(const char* path, const char* content);
+  void publishEvent(pub_event event, String param);
+  void callback(char* topic, byte* payload, unsigned int length);
 
   void initMQTT()
   {
+    client.setCallback(callback);
     client.setKeepAlive(15);
     client.setServer(mqtt_server, 1883);
     if (!client.connected())
@@ -66,5 +69,33 @@ namespace mqtt
         ESP.restart();
       }
     }
+  }
+
+  void publishEvent(pub_event event, String param){
+    JsonDocument doc;
+    doc["event"] = event;
+    doc["param"] = param;
+    doc["mac"] = WiFi.macAddress();
+    doc["fw"] = PROGRAM_VERSION ;
+    serializeJson(doc, serializedString);
+
+    mqtt::mqttPublish("cleanair/events", serializedString);
+  }
+
+
+  void callback(char* topic, byte* payload, unsigned int length) {
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+
+    char strpayload[length+1];
+    memcpy(strpayload, payload, length);
+    strpayload[length]=0;
+    Serial.println(strpayload);
+    //free(strpayload);
+    // for (int i=0;i<length;i++) {
+    //   Serial.print((char)payload[i]);
+    // }
+    // Serial.println();
   }
 }
