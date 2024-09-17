@@ -96,7 +96,7 @@ void measurementTick(){
     Serial.print("Hourmin is:"); Serial.println(hourmin);
 
 
-    if (dow >=1 && dow <=5 && hourmin >= 1100 && hourmin < 2130)
+    if (dow >=1 && dow <=5 && hourmin >= 1100 && hourmin < 2000)
     {    
       filterState = true;
     } else {
