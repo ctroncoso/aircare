@@ -52,6 +52,7 @@ namespace mqtt
       if (client.connect(clientId.c_str()))
       {
         Serial.println("connected");
+        client.subscribe("AirCare/inTopic");  
       }
       else
       {
