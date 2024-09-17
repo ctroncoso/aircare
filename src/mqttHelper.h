@@ -15,6 +15,7 @@ namespace mqtt
 
   void initMQTT()
   {
+    client.setKeepAlive(15);
     client.setServer(mqtt_server, 1883);
     if (!client.connected())
     {

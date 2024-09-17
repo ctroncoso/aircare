@@ -92,6 +92,7 @@ void loop()
   button.tick();
   measurementTick();
   updateTick(); // check for updates and install.
+  mqtt::client.loop();
 }
 
 void startWifiPortal()
