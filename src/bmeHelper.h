@@ -30,7 +30,7 @@ namespace bme{
               Adafruit_BME280::SAMPLING_X16,
               Adafruit_BME280::SAMPLING_X16,
               Adafruit_BME280::FILTER_OFF   );        
-    //mqtt::publishEvent(INFO, "BME280|INIT_OK|BME280 found and initialized.");
+    mqtt::publishEvent(INFO, "BME280|INIT_OK|BME280 found and initialized.");
     leds::blinkLed(ledPinY,5);
     delay(1000);
   }

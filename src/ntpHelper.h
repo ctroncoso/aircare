@@ -26,7 +26,7 @@ namespace ntp{
         sntp_set_time_sync_notification_cb( timeavailable );
         sntp_servermode_dhcp(1);    // (optional)
         configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
-        //mqtt::publishEvent(INFO, "SNTP|TIME_SET|SNTP server connected. DateTime updated.");
+        mqtt::publishEvent(INFO, "SNTP|TIME_SET|SNTP server connected. DateTime updated.");
         leds::blinkLed(ledPinY,3);
         delay(1000);
     }

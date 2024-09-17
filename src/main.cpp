@@ -61,7 +61,7 @@ void setup()
   leds::initLEDS();                 // in globals.h
   wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
   mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
- // mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
+  mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
   ota::checkUpdate();               // Check for updates immediately
   ntp::initNTP();                   // Sinchronize time and date
   sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
@@ -81,7 +81,7 @@ void setup()
   // leds::blinkLed(ledPinG,3);
   // delay(1000);
 
-
+  mqtt::publishEvent(INFO, "SETUP|OK|Setup finished successfully.");
 }
 
 void loop()

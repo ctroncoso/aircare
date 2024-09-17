@@ -21,18 +21,20 @@ namespace ota
     // check if update (or downgrade) exists. Download and reboot.
     if (ret == ESP32OTAPull::UPDATE_AVAILABLE)
     {
-      Serial.println("Celaring leds");
+      Serial.println("Clearing leds");
       leds::clearLeds();
       leds::blinkLed(ledPinR, 4, false);
       leds::blinkLed(ledPinG, 4, false);
       leds::blinkLed(ledPinY, 4, false);
       delay(2000);
-      Serial.println("Update found. Downloading & installing.");
+      Serial.println("Update found. Downloading & installing."); // TODO - send mqtt event
+	  mqtt::publishEvent(INFO, "UPDT|Found|Update found. Updating."); 
       ret = ota
                 .AllowDowngrades(true)
                 .CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION);
-  }
-  Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));			
+  	}
+	mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
+  	Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));			
   }
 
 

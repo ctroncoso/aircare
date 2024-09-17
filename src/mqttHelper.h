@@ -24,6 +24,7 @@ namespace mqtt
     {
       mqttreconnect();
     }
+    publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established."); 
     leds::blinkLed(ledPinY,2);
     delay(1000);
   }
