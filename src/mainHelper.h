@@ -78,8 +78,13 @@ void measurementTick(){
   if(currentTime - previousTimer_1 >= measurementDelay){
     previousTimer_1 = currentTime;
 
+
+    //-------------- Relay Activation section ----------------
+    bool filterState;
+
     // check if day is mon-fri between 8am and 6:30pm (time in UTC-3)
     struct tm dt = ntp::getTM();
+    //int mday = dt.tm_mday;
     int dow = dt.tm_wday;
     int hour = dt.tm_hour;
     int minute = dt.tm_min;
@@ -90,6 +95,20 @@ void measurementTick(){
 
 
     if (dow >=1 && dow <=5 && hourmin >= 1100 && hourmin < 2130)
+    {    
+      filterState = true;
+    } else {
+      filterState = false;
+    }
+
+    if (dt.tm_mon == 8 && dt.tm_mday >= 18 && dt.tm_mday <= 20)
+    {
+      Serial.println("Exception: relay will be off today");
+      filterState = filterState && false;
+    }
+    
+
+    if (filterState)
     {
       Serial.println("fan and UV ACTIVATED");
       digitalWrite(rlPin1,LOW);  // turn on fan
@@ -103,8 +122,7 @@ void measurementTick(){
       rl1State=0;
       rl2State=0;
     }
-      
-    
+    //----------------------------------
 
     readValues();
     co2_State = getCO2_State(sunriseH::co2_fc);
@@ -115,8 +133,9 @@ void measurementTick(){
 
     leds::setLedOnCO2Condition(co2_State);
   }
-
 }
+
+
 /**
  * @brief Update cycle funtion.
  * 
