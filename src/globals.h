@@ -40,3 +40,5 @@ WiFiManager wm;
 
 unsigned long previousTimer_1 = 0;
 unsigned long previousTimer_2 = 0;
+
+enum pub_event{ERROR = -1, INFO=0 };
