@@ -39,8 +39,8 @@ namespace mqtt
     {
       Serial.print("Attempting MQTT connection...");
       // ID de cliente con string random
-      String clientId = "ESP32Client-";
-      clientId += String(random(0xffff), HEX);
+      String clientId = "aircare-";
+      clientId += WiFi.macAddress();
       // probar conexión
       if (client.connect(clientId.c_str()))
       {
