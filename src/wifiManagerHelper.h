@@ -1,7 +1,6 @@
 #pragma once
 
 #include "globals.h"
-#include "ledHelper.h"
 #include <WiFiManager.h>
 
 namespace wifiM{
@@ -27,6 +26,9 @@ namespace wifiM{
         else {
             //if you get here you have connected to the WiFi    
             Serial.println("connected...yeey :)");
+            
+            leds::blinkLed(ledPinY,1);
+            delay(1000);
         }
     }
 }

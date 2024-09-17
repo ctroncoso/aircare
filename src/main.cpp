@@ -1,13 +1,13 @@
 #include "globals.h"
+#include "ledHelper.h"
+#include "wifiManagerHelper.h"
+#include "mqttHelper.h"
+#include "mainHelper.h"
 #include "ntpHelper.h"
 #include "time.h"
 #include "sunriseHelper.h"
 #include "bmeHelper.h"
-#include "ledHelper.h"
-#include "mqttHelper.h"
 #include "otaHelper.h"
-#include "mainHelper.h"
-#include "wifiManagerHelper.h"
 #include "OneButton.h"
 
 #include "ESP32OTAPull.h"
@@ -53,31 +53,20 @@ void setup()
   Serial.print("MAC: ");
   Serial.println(String(WiFi.macAddress()));
 
+
+/**
+ * Initializacion everything
+ * 
+ */
   leds::initLEDS();                 // in globals.h
-
   wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
-  leds::blinkLed(ledPinY,1);
-  delay(1000);
-
   mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
-  leds::blinkLed(ledPinY,2);
-  delay(1000);
-  
-  mqtt::mqttPublish("/cleanair/events", "Booting....test-rig"); 
-
+ // mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
   ota::checkUpdate();               // Check for updates immediately
-  
   ntp::initNTP();                   // Sinchronize time and date
-  leds::blinkLed(ledPinY,3);
-  delay(1000);
-
   sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
-  leds::blinkLed(ledPinY,4);
-  delay(1000);
-  
   bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
-  leds::blinkLed(ledPinY,5);
-  delay(1000);
+
   
 
   

@@ -19,6 +19,8 @@ namespace mqtt
     {
       mqttreconnect();
     }
+    leds::blinkLed(ledPinY,2);
+    delay(1000);
   }
 
   void mqttPublish(const char* mq_path, const char* content)
