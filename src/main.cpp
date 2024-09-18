@@ -59,7 +59,13 @@ void setup()
  * 
  */
   leds::initLEDS();                 // in globals.h
-  wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
+  
+  // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
+  if(!wifiM::initWifiM()){
+    delay(180000);
+    ESP.restart();
+  }              
+  
   mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
   mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
   ota::checkUpdate();               // Check for updates immediately
