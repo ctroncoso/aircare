@@ -122,21 +122,24 @@ boolean write16bit(uint8_t offsetReg, int8_t hiByte, int8_t loByte) {     // DON
 }
 
 
-void sunrise::initSunrise() {     // DONE!
+bool sunrise::initSunrise() {     // DONE!
+  int attempts = 10;
   Wire.begin(DATA_PIN, CLOCK_PIN);
   Wire.setClock(100000);
   Wire.beginTransmission(SUNRISE_ADDRESS);
-  while (Wire.endTransmission () != 2)  // Receive 2 = success (Address NACK response)
+  while (Wire.endTransmission() != 2 && attempts >0)  // Receive 2 = success (Address NACK response)
   {
     Serial.print("Waiting for sunrise response from address 0x");
     Serial.println(SUNRISE_ADDRESS, HEX);
     delay(1000);
+    attempts--;
     Wire.begin(DATA_PIN, CLOCK_PIN);
     Wire.setClock(100000);
     Wire.beginTransmission(SUNRISE_ADDRESS);
   }
-  Serial.println("Sunrise ready!");
-  delay(100);
+
+  bool result = (attempts > 0);
+  return result;
 }
 
 
