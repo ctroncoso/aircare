@@ -59,15 +59,25 @@ void setup()
  * 
  */
   leds::initLEDS();                 // in globals.h
-  
+
   // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
-  if(!wifiM::initWifiM()){
+  if (!wifiM::initWifiM())
+  {
     delay(180000);
     ESP.restart();
-  }              
-  
-  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
+  }
+
+  // Initialize connection to MQTT Broker.
+  if (mqtt::initMQTT())
+  {
+    mqtt::client.subscribe("AirCare/inTopic");
+    mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
+    leds::blinkLed(ledPinY, 2);
+    delay(1000);
+  }
+
   mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
+
   ota::checkUpdate();               // Check for updates immediately
   ntp::initNTP();                   // Sinchronize time and date
   sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
