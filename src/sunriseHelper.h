@@ -24,10 +24,19 @@ namespace sunriseH {
     co2sensor.setNbrSamples(16);
     co2sensor.setMeasurementMode(CONTINOUS);
     co2sensor.resetSensor();
-    while(co2sensor.readErrorStatus() >> 7){
+
+    int attempts = 20;
+    while(co2sensor.readErrorStatus() >> 7 && (attempts > 0) ){
       Serial.println("Esperando primera medicion...");  
+      attempts--;
       delay(500);
     }
+    if (attempts == 0)
+    {
+      // I2C bus with issues. Failed
+      return false;
+    }
+    
     return true;
   }
 }
