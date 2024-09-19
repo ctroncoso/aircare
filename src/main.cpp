@@ -59,13 +59,64 @@ void setup()
  * 
  */
   leds::initLEDS();                 // in globals.h
-  wifiM::initWifiM();               // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
-  mqtt::initMQTT();                 // Initialize connection to MQTT Broker.
+
+  // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
+  if (!wifiM::initWifiM())
+  {
+    delay(180000);
+    ESP.restart();
+  }
+
+  // Initialize connection to MQTT Broker.
+  if (mqtt::initMQTT())
+  {
+    mqtt::client.subscribe("AirCare/inTopic");
+    mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
+    leds::blinkLed(ledPinY, 2);
+    delay(1000);
+  }
+
   mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
-  ota::checkUpdate();               // Check for updates immediately
+
+  // Check for updates immediately
+  if (!ota::checkUpdate())
+  {
+    mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
+  }
+                 
   ntp::initNTP();                   // Sinchronize time and date
-  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
-  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
+
+  // Connect and initialize CO2 sensor
+  if (sunriseH::initCo2Sensor())
+  {
+    mqtt::publishEvent(INFO, "CO2_SENSOR|INIT_OK|CO2 sensor Initialized OK"); 
+  }
+  else 
+  {
+    mqtt::publishEvent(ERROR, "CO2_SENSOR|I2C_COMM_SUNRISE|CO2 sensor not responding"); 
+    delay(180000);
+    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
+    delay(10000);
+    ESP.restart();
+  } 
+  
+  // Connect and initialize Temp/Presure/Humidity sensor
+  if (bme::initBME())
+  {
+    mqtt::publishEvent(INFO, "BME280|INIT_OK|BME280 found and initialized.");
+    leds::blinkLed(ledPinY,5);
+    delay(1000);
+
+  }
+  else
+  {
+    mqtt::publishEvent(ERROR, "BME280|I2C_COMM_BME280|BME280 sensor not responding"); 
+    delay(180000);
+    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
+    delay(10000);
+    ESP.restart();
+  }   
+  
 
   
 

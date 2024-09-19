@@ -14,18 +14,29 @@ namespace sunriseH {
   uint16_t co2_uu;
   
 
-  void initCo2Sensor(){
-    co2sensor.initSunrise();
+  bool initCo2Sensor(){
+    if (!co2sensor.initSunrise())
+    {
+      return false; // initalization failed
+    }
+    delay(100);
     co2sensor.setMeasurementPeriod(measurementDelay/1000);
     co2sensor.setNbrSamples(16);
     co2sensor.setMeasurementMode(CONTINOUS);
     co2sensor.resetSensor();
-    
-    while(co2sensor.readErrorStatus() >> 7){
+
+    int attempts = 20;
+    while(co2sensor.readErrorStatus() >> 7 && (attempts > 0) ){
       Serial.println("Esperando primera medicion...");  
+      attempts--;
       delay(500);
     }
-    // leds::blinkLed(ledPinY,4);
-    // delay(1000);    
+    if (attempts == 0)
+    {
+      // I2C bus with issues. Failed
+      return false;
+    }
+    
+    return true;
   }
 }

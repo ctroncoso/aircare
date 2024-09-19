@@ -10,7 +10,7 @@ namespace ota
 	void callback(int offset, int totallength);
 	const char *errtext(int code);
 
-  void checkUpdate(){
+  bool checkUpdate(){
     ESP32OTAPull ota;
     ota.SetCallback(callback);
     Serial.println("Checking update");
@@ -33,8 +33,8 @@ namespace ota
                 .AllowDowngrades(true)
                 .CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION);
   	}
-	mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
-  	Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));			
+  	Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));		
+	return false;	
   }
 
 

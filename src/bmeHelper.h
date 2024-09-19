@@ -13,25 +13,23 @@ namespace bme{
   float altitude; 
   float humidity; 
 
-  void initBME();   
+  bool initBME();   
 
 
-  void initBME(){
+  bool initBME(){
     unsigned status;
     
     status = bme.begin(0x76);
     if (!status) {
       Serial.println("No se encontró un bme280. Verifique cableado.");
       Serial.print("SensorID es: 0x"); Serial.println(bme.sensorID(),16);
-      while (1) delay(10); //TODO Change delay to mqtt alert, wait and reboot.
+      return false;
     }
     bme::bme.setSampling(Adafruit_BME280::MODE_NORMAL,
               Adafruit_BME280::SAMPLING_X16,
               Adafruit_BME280::SAMPLING_X16,
               Adafruit_BME280::SAMPLING_X16,
               Adafruit_BME280::FILTER_OFF   );        
-    mqtt::publishEvent(INFO, "BME280|INIT_OK|BME280 found and initialized.");
-    leds::blinkLed(ledPinY,5);
-    delay(1000);
+    return true;
   }
 }

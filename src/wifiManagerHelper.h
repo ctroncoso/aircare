@@ -9,26 +9,21 @@ namespace wifiM{
         leds::blinkLed(ledPinG, 4, true);
     }
 
-    void initWifiM(){
+    bool initWifiM(){
         wm.setAPCallback(configModeCallback);
         wm.setConfigPortalTimeout(PORTAL_TIMEOUT);
-        bool res = wm.autoConnect(PORTAL_NAME); 
 
-        if(!res) {
-            Serial.println("Failed to connect. Waiting 3 minutes and restarting.");
-            for (int i = 0; i <= 3; i++) {
-                leds::blinkLed(ledPinR,2);
-                delay(500);
+        int attempts = 5;
+        bool res = false;
+        while (attempts > 0 && !res)
+        {
+            res = wm.autoConnect(PORTAL_NAME);
+            if (!res)
+            {
+                delay(60000);
+                attempts--;
             }
-            delay(180000);  // wait 3 minutes
-            ESP.restart();
-        } 
-        else {
-            //if you get here you have connected to the WiFi    
-            Serial.println("connected...yeey :)");
-            
-            leds::blinkLed(ledPinY,1);
-            delay(1000);
         }
+        return res;
     }
 }
