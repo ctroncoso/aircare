@@ -78,7 +78,12 @@ void setup()
 
   mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
 
-  ota::checkUpdate();               // Check for updates immediately
+  // Check for updates immediately
+  if (!ota::checkUpdate())
+  {
+    mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
+  }
+                 
   ntp::initNTP();                   // Sinchronize time and date
   sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
   bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
