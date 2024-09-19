@@ -61,7 +61,7 @@ class sunrise
 {
   public:
     sunrise(void);
-    void      initSunrise();
+    bool      initSunrise();
     int16_t   readErrorStatus(void);
     int16_t   readChipTemp(void);
     uint8_t   readMeasurementCount(void);

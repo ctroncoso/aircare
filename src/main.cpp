@@ -85,7 +85,19 @@ void setup()
   }
                  
   ntp::initNTP();                   // Sinchronize time and date
-  sunriseH::initCo2Sensor();        // Connect and initialize CO2 sensor
+
+  // Connect and initialize CO2 sensor
+  if (!sunriseH::initCo2Sensor())
+  {
+    mqtt::publishEvent(ERROR, "CO2_SENSOR|I2C_COMM_SUNRISE|CO2 sensor not responding"); 
+    delay(180000);
+    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
+    ESP.restart();
+  } else {
+    mqtt::publishEvent(INFO, "CO2_SENSOR|INIT_OK|CO2 sensor Initialized OK"); 
+  }
+  
+  
   bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
 
   
