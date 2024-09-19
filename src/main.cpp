@@ -93,12 +93,23 @@ void setup()
     delay(180000);
     mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
     ESP.restart();
-  } else {
-    mqtt::publishEvent(INFO, "CO2_SENSOR|INIT_OK|CO2 sensor Initialized OK"); 
+  // Connect and initialize Temp/Presure/Humidity sensor
+  if (bme::initBME())
+  {
+    mqtt::publishEvent(INFO, "BME280|INIT_OK|BME280 found and initialized.");
+    leds::blinkLed(ledPinY,5);
+    delay(1000);
+
   }
+  else
+  {
+    mqtt::publishEvent(ERROR, "BME280|I2C_COMM_BME280|BME280 sensor not responding"); 
+    delay(180000);
+    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
+    delay(10000);
+    ESP.restart();
+  }   
   
-  
-  bme::initBME();                   // Connect and initialize Temp/Presure/Humidity sensor
 
   
 
