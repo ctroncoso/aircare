@@ -59,6 +59,7 @@ void setup()
  * 
  */
   leds::initLEDS();                 // in globals.h
+  int wifi_level;
 
   // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
   if (!wifiM::initWifiM())
@@ -66,17 +67,22 @@ void setup()
     delay(180000);
     ESP.restart();
   }
+  else
+  {
+    wifi_level = WiFi.RSSI();
+  }
 
   // Initialize connection to MQTT Broker.
   if (mqtt::initMQTT())
   {
-    mqtt::client.subscribe("AirCare/inTopic");
+    mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
+    mqtt::publishEvent(INFO, "WIFI_RSSI|"+String(wifi_level)+"|WiFi connection strength.");
     mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
     leds::blinkLed(ledPinY, 2);
     delay(1000);
   }
 
-  mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
+  
 
   // Check for updates immediately
   if (!ota::checkUpdate())
