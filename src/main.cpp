@@ -78,6 +78,11 @@ void setup()
     mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
     mqtt::publishEvent(INFO, "WIFI_RSSI|"+String(wifi_level)+"|WiFi connection strength.");
     mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
+    mqtt::client.subscribe("AirCare/inCommands/broadcast");
+    mqtt::client.subscribe(String("AirCare/inCommands/"+WiFi.macAddress()).c_str());
+    mqtt::publishEvent(INFO, "MQTT_SUSCRIBE|AirCare/inCommands/broadcast|MQTT suscribed to broadcast.");
+    mqtt::publishEvent(INFO, "MQTT_SUSCRIBE|AirCare/inCommands/"+WiFi.macAddress()+"|MQTT suscribed to own mac.");
+
     leds::blinkLed(ledPinY, 2);
     delay(1000);
   }
