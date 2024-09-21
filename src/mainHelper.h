@@ -96,18 +96,18 @@ void measurementTick(){
     Serial.print("Hourmin is:"); Serial.println(hourmin);
 
 
-    if (dow >=1 && dow <=5 && hourmin >= 1100 && hourmin < 2000)
+    if (dow >=1 && dow <=5 && hourmin >= 1100 && hourmin < 2130)
     {    
       filterState = true;
     } else {
       filterState = false;
     }
 
-    if (dt.tm_mon == 8 && dt.tm_mday >= 18 && dt.tm_mday <= 20)
-    {
-      Serial.println("Exception: relay will be off today");
-      filterState = filterState && false;
-    }
+    // if (dt.tm_mon == 8 && dt.tm_mday >= 18 && dt.tm_mday <= 20)
+    // {
+    //   Serial.println("Exception: relay will be off today");
+    //   filterState = filterState && false;
+    // }
     
 
     if (filterState)
