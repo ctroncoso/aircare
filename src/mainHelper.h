@@ -103,6 +103,11 @@ void measurementTick(){
       filterState = false;
     }
 
+    if (hourmin >=1530 && hourmin < 1730)
+    {
+      filterState = false;
+    }
+    
     // if (dt.tm_mon == 8 && dt.tm_mday >= 18 && dt.tm_mday <= 20)
     // {
     //   Serial.println("Exception: relay will be off today");
