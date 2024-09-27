@@ -103,7 +103,7 @@ void measurementTick(){
       filterState = false;
     }
 
-    if (hourmin >=1530 && hourmin < 1730)
+    if (hourmin >=1530 && hourmin < 1715)
     {
       filterState = false;
     }
