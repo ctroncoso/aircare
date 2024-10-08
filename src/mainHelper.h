@@ -108,6 +108,8 @@ void measurementTick(){
       filterState = false;
     }
     
+    filterState = false;  // Filters disconnnected for sample taking.
+    
     // if (dt.tm_mon == 8 && dt.tm_mday >= 18 && dt.tm_mday <= 20)
     // {
     //   Serial.println("Exception: relay will be off today");
