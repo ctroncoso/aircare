@@ -153,7 +153,13 @@ void loop()
   button.tick();
   measurementTick();
   updateTick(); // check for updates and install.
+
+  //-------------MQTT
+  if(!mqtt::client.connected()){
+    mqtt::mqttreconnect();
+  }
   mqtt::client.loop();
+  //-----------------
 }
 
 
