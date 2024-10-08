@@ -2,13 +2,13 @@
 #include "ledHelper.h"
 #include "wifiManagerHelper.h"
 #include "mqttHelper.h"
-#include "mainHelper.h"
 #include "ntpHelper.h"
 #include "time.h"
 #include "sunriseHelper.h"
 #include "bmeHelper.h"
 #include "otaHelper.h"
 #include "OneButton.h"
+#include "mainHelper.h"
 
 #include "ESP32OTAPull.h"
 
@@ -95,7 +95,8 @@ void setup()
     mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
   }
                  
-  ntp::initNTP();                   // Sinchronize time and date
+  // Sinchronize time and date
+  ntp::initNTP();                   
 
   // Connect and initialize CO2 sensor
   if (sunriseH::initCo2Sensor())
@@ -110,6 +111,8 @@ void setup()
     delay(10000);
     ESP.restart();
   } 
+
+
   
   // Connect and initialize Temp/Presure/Humidity sensor
   if (bme::initBME())
@@ -132,16 +135,12 @@ void setup()
   
 
   
-  // set relay pins to output
+  // -------set relay pins to output
   pinMode(rlPin1, OUTPUT);
   pinMode(rlPin2, OUTPUT);
   digitalWrite(rlPin1,HIGH);  // turn off fan
   digitalWrite(rlPin2,HIGH);  // turn off UV
 
-
-  // testRelay();
-  // leds::blinkLed(ledPinG,3);
-  // delay(1000);
 
   mqtt::publishEvent(INFO, "SETUP|OK|Setup finished successfully.");
 }
@@ -156,6 +155,9 @@ void loop()
   updateTick(); // check for updates and install.
   mqtt::client.loop();
 }
+
+
+
 
 void startWifiPortal()
 {
