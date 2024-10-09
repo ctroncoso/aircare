@@ -16,29 +16,15 @@
 int alarm_level = 0;
 OneButton button(GPIO_NUM_0);
 
-void handleMultiClick()
-{
-  int clicks = button.getNumberClicks();
-  switch (clicks)
-  {
-  case 3:
-    Serial.println("starting OTA");
-    ota::checkUpdate();
-    break;
-  default:
-    Serial.println(clicks);
-    break;
-  }
-}
 
+void handleMultiClick();
 void configModeCallback(WiFiManager *wm);
 void startWifiPortal();
 
 void setup()
 {
   Serial.begin(115200);
-  while (!Serial)
-    ;
+  delay(100);
   
   #ifdef DEBUG
     Serial.println("--- DEBUG ENABLED");
@@ -149,11 +135,25 @@ void loop()
 }
 
 
-
-
 void startWifiPortal()
 {
   Serial.println("Portal Triggered...");
   wm.startConfigPortal(PORTAL_NAME);
   ESP.restart();
+}
+
+
+void handleMultiClick()
+{
+  int clicks = button.getNumberClicks();
+  switch (clicks)
+  {
+  case 3:
+    Serial.println("starting OTA");
+    ota::checkUpdate();
+    break;
+  default:
+    Serial.println(clicks);
+    break;
+  }
 }
