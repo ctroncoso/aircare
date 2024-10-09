@@ -99,11 +99,7 @@ void setup()
   ntp::initNTP();                   
 
   // Connect and initialize CO2 sensor
-  if (sunriseH::initCo2Sensor())
-  {
-    mqtt::publishEvent(INFO, "CO2_SENSOR|INIT_OK|CO2 sensor Initialized OK"); 
-  }
-  else 
+  if (!sunriseH::initCo2Sensor())
   {
     mqtt::publishEvent(ERROR, "CO2_SENSOR|I2C_COMM_SUNRISE|CO2 sensor not responding"); 
     delay(180000);
@@ -115,14 +111,7 @@ void setup()
 
   
   // Connect and initialize Temp/Presure/Humidity sensor
-  if (bme::initBME())
-  {
-    mqtt::publishEvent(INFO, "BME280|INIT_OK|BME280 found and initialized.");
-    leds::blinkLed(ledPinY,5);
-    delay(1000);
-
-  }
-  else
+  if (!bme::initBME())
   {
     mqtt::publishEvent(ERROR, "BME280|I2C_COMM_BME280|BME280 sensor not responding"); 
     delay(180000);
@@ -131,9 +120,6 @@ void setup()
     ESP.restart();
   }   
   
-
-  
-
   
   // -------set relay pins to output
   pinMode(rlPin1, OUTPUT);
