@@ -2,15 +2,15 @@
 	"Configurations": [
 		{
 		"Board": "Espressif ESP32 Dev Module",
-		"Version": "1.1.7-D",
+		"Version": "1.1.8",
 		"Device": "A8:42:E3:AB:10:88",
-		"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.1.7-D.bin"
+		"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.1.8.bin"
 		},
 		{
 		"Board": "Espressif ESP32 Dev Module",
-		"Version": "1.1.7-D",
+		"Version": "1.1.8",
 		"Device": "A8:42:E3:AB:6F:40",
-		"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.1.7-D.bin"
+		"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.1.8.bin"
 		}
 	]
 }
