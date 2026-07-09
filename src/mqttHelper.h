@@ -52,8 +52,8 @@ namespace mqtt
 
       if (attempts == 0)
       {
-        // TODO - write to log
-        ESP.restart();
+        Serial.println("MQTT: max reconnect attempts reached. Continuing without MQTT.");
+        break;
       }
     }
     return client.connected();

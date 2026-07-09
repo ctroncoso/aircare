@@ -27,9 +27,8 @@ namespace ota
       leds::blinkLed(ledPinG, 4, false);
       leds::blinkLed(ledPinY, 4, false);
       delay(2000);
-      Serial.println("Update found. Downloading & installing."); // TODO - send mqtt event
-	  mqtt::publishEvent(INFO, "UPDT|Found|Update found. Updating."); 
-      ret = ota
+      Serial.println("Update found. Downloading & installing.");
+	  ret = ota
                 .AllowDowngrades(true)
                 .CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json", PROGRAM_VERSION);
   	}

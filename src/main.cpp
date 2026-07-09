@@ -64,11 +64,8 @@ void setup()
 
 
 
-  // Check for updates immediately
-  if (!ota::checkUpdate())
-  {
-    mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
-  }
+  // Check for updates immediately (runs before MQTT — no MQTT calls inside)
+  ota::checkUpdate();
 
   
   
@@ -78,6 +75,7 @@ void setup()
     mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
     mqtt::publishEvent(INFO, "WIFI_RSSI|"+String(wifi_level)+"|WiFi connection strength.");
     mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
+    mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found.");
     mqtt::client.subscribe("AirCare/inCommands/broadcast");
     mqtt::client.subscribe(String("AirCare/inCommands/"+WiFi.macAddress()).c_str());
     mqtt::publishEvent(INFO, "MQTT_SUSCRIBE|AirCare/inCommands/broadcast|MQTT suscribed to broadcast.");
@@ -85,6 +83,10 @@ void setup()
 
     leds::blinkLed(ledPinY, 2);
     delay(1000);
+  }
+  else
+  {
+    Serial.println("MQTT unavailable. Continuing setup without broker.");
   }
 
   
