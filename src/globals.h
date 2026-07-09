@@ -43,6 +43,7 @@ WiFiManager wm;
 
 unsigned long previousTimer_1 = 0;
 unsigned long previousTimer_2 = 0;
+unsigned long previousTimer_mqtt = 0;   // gate for periodic MQTT reconnect attempts
 
 enum pub_event
 {

@@ -136,8 +136,14 @@ void loop()
   updateTick(); // check for updates and install.
 
   //-------------MQTT
-  if(!mqtt::client.connected()){
-    mqtt::mqttreconnect();
+  // Attempt a single reconnect every 30 s if the broker is not reachable.
+  // mqttTryReconnect() does not block, so the loop stays responsive.
+  if (!mqtt::client.connected()) {
+    unsigned long currentTime = millis();
+    if (currentTime - previousTimer_mqtt >= ONE_MIN / 2) {  // 30 s
+      previousTimer_mqtt = currentTime;
+      mqtt::mqttTryReconnect();
+    }
   }
   mqtt::client.loop();
   //-----------------

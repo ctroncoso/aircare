@@ -11,6 +11,7 @@ namespace mqtt
 
   bool initMQTT();
   bool mqttreconnect();
+  bool mqttTryReconnect();
   void mqttPublish(const char* path, const char* content);
   void publishEvent(pub_event event, String param);
   void callback(char* topic, byte* payload, unsigned int length);
@@ -60,11 +61,32 @@ namespace mqtt
   }
 
 
+  /// @brief Single non-blocking reconnect attempt for use in the main loop.
+  /// Does not loop or delay — returns immediately whether it succeeded or not.
+  bool mqttTryReconnect()
+  {
+    String clientId = "aircare-" + WiFi.macAddress();
+    if (client.connect(clientId.c_str()))
+    {
+      Serial.println("MQTT: reconnected.");
+      // Re-subscribe after reconnect
+      client.subscribe("AirCare/inCommands/broadcast");
+      client.subscribe(String("AirCare/inCommands/" + WiFi.macAddress()).c_str());
+    }
+    else
+    {
+      Serial.printf("MQTT: reconnect attempt failed, rc=%d\n", client.state());
+    }
+    return client.connected();
+  }
+
+
   void mqttPublish(const char* mq_path, const char* content)
   {
     if (!client.connected())
     {
-      mqttreconnect();
+      Serial.println("MQTT: skipping publish, not connected.");
+      return;
     }
     client.publish(mq_path, content);
   }
