@@ -58,6 +58,20 @@ void setup()
     wifi_level = WiFi.RSSI();
   }
 
+  
+  // Sinchronize time and date
+  ntp::initNTP();  
+
+
+
+  // Check for updates immediately
+  if (!ota::checkUpdate())
+  {
+    mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
+  }
+
+  
+  
   // Initialize connection to MQTT Broker.
   if (mqtt::initMQTT())
   {
@@ -75,14 +89,7 @@ void setup()
 
   
 
-  // Check for updates immediately
-  if (!ota::checkUpdate())
-  {
-    mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found."); 
-  }
                  
-  // Sinchronize time and date
-  ntp::initNTP();                   
 
   // Connect and initialize CO2 sensor
   if (!sunriseH::initCo2Sensor())
