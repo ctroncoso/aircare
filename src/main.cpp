@@ -75,6 +75,7 @@ void setup()
     mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
     mqtt::publishEvent(INFO, "WIFI_RSSI|"+String(wifi_level)+"|WiFi connection strength.");
     mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
+    mqtt::publishEvent(INFO, "SNTP|TIME_SET|SNTP server connected. DateTime updated.");
     mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found.");
     mqtt::client.subscribe("AirCare/inCommands/broadcast");
     mqtt::client.subscribe(String("AirCare/inCommands/"+WiFi.macAddress()).c_str());
