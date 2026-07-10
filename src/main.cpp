@@ -97,7 +97,8 @@ void setup()
   // Connect and initialize CO2 sensor
   if (!sunriseH::initCo2Sensor())
   {
-    mqtt::publishEvent(ERROR, "CO2_SENSOR|I2C_COMM_SUNRISE|CO2 sensor not responding"); 
+    Serial.println("Sensor Sunrise no responde.");
+    mqtt::publishEvent(ERROR, "CO2_SENSOR|I2C_COMM_SUNRISE|CO2 sensor not responding");
     delay(180000);
     mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
     delay(10000);

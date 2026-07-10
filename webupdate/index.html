@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actualizador firmware ESP32</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 40px auto;
+            max-width: 500px;
+            line-height: 1.6;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+
+        .card {
+            border: 1px solid #e0e0e0;
+            padding: 30px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #24292e;
+        }
+
+        p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+
+        button {
+            background: #2ea44f;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background: #2c974b;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        #log {
+            background: #1e1e1e;
+            color: #39ff14;
+            padding: 15px;
+            border-radius: 6px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            margin-top: 25px;
+            text-align: left;
+            white-space: pre-wrap;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2>Actualizador firmware ESP32</h2>
+        <p>Conecte el ESP32 via cable USB. Luego presione el botón de abajo. </p>
+        <p>De la ventana que saldrá, seleccione el su dispositivo. </p>
+        <p>Escribiendo en dirección 0x10000.</p>
+
+        <button id="flashBtn">Conecte y actualice la APP</button>
+
+        <div id="log">Ready to flash. Connect device to begin...</div>
+    </div>
+
+    <script type="module">
+        import { ESPLoader, Transport } from 'https://cdn.jsdelivr.net/npm/esptool-js/bundle.js';
+
+        const logDiv = document.getElementById('log');
+        const flashBtn = document.getElementById('flashBtn');
+        const FIRMWARE_URL = './firmware.bin';
+
+        function log(msg) {
+            logDiv.innerText += msg + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        flashBtn.addEventListener('click', async () => {
+            logDiv.innerText = '';
+            flashBtn.disabled = true;
+
+            try {
+                // 1. Open WebSerial Dialog IMMEDIATELY on click to comply with browser safety checks
+                log("🔌 Por favor, selecione su conección al ESP32 de la ventana emergente...");
+                const port = await navigator.serial.requestPort();
+                const transport = new Transport(port, true);
+
+                // 2. Fetch your local firmware file
+                log("📥 Downloading firmware.bin from server...");
+                const response = await fetch(FIRMWARE_URL);
+                if (!response.ok) throw new Error(`Could not find firmware.bin on server. (Status: ${response.status})`);
+                const buffer = await response.arrayBuffer();
+                log(`✅ Se descargaron (${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB) a la memoria del browser.`);
+
+                // 3. Connect to the ESP32
+                log("⚡ Conectando al chip...");
+                const esploader = new ESPLoader({
+                    transport: transport,
+                    baudrate: 460800,
+                    terminal: {
+                        clean: () => logDiv.innerText = '',
+                        write: (data) => logDiv.innerText += data,
+                        writeLine: (data) => logDiv.innerText += data + '\n'
+                    }
+                });
+
+                const chip = await esploader.main();
+                log(`\n💻 Chip detectado: ${chip}`);
+
+                // 4. Send layout configurations matching contemporary esptool specs
+                const firmwareData = new Uint8Array(buffer);
+                const flashOptions = {
+                    fileArray: [{ data: firmwareData, address: 0x10000 }],
+                    flashSize: 'keep',
+                    flashMode: 'keep',
+                    flashFreq: 'keep',
+                    eraseAll: false,
+                    compress: true,
+                    reportProgress: (fileIndex, written, total) => {
+                        log(`Progreso de escritura: ${((written / total) * 100).toFixed(1)}%`);
+                    }
+                };
+
+                log("🚀 Escribiendo firmware a 0x10000... NO DESCONECTAR!");
+                await esploader.writeFlash(flashOptions);
+
+                log("\n🎉 EXITO! Su ESP32 ha sido actualizado con éxito.");
+                await transport.disconnect();
+
+            } catch (err) {
+                log(`\n❌ Error: ${err.message}`);
+                console.error(err);
+            } finally {
+                flashBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -68,7 +68,7 @@ boolean write8bit(uint8_t offsetReg, int8_t myValue) {    // DONE!
   if (Wire.endTransmission(true) == 0) {
     ok = true;
   } else {
-    Serial.println("Failed tosend request!");
+    Serial.println("Failed to send request!");
   }
   delay(EEPROM_WRITE_DELAY);    // Only necessary when updating EEPROM, but added in general
   return ok;
