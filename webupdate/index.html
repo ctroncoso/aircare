@@ -196,15 +196,27 @@
                 log(`\n💻 Chip detectado: ${chip}`);
 
                 const firmwareData = new Uint8Array(buffer);
+
+                // Create a blank buffer (8192 bytes filled with 0xFF) to erase the OTA pointer
+                const eraseOtaData = new Uint8Array(8192).fill(0xFF);
+
                 const flashOptions = {
-                    fileArray: [{ data: firmwareData, address: 0x190000 }],
+                    fileArray: [
+                        // 👇 Wipes the OTA pointer, forcing the bootloader to default back to app0 (0x10000)
+                        { data: eraseOtaData, address: 0xe000 },
+                        // Your actual firmware application
+                        { data: firmwareData, address: 0x10000 }
+                    ],
                     flashSize: 'keep',
                     flashMode: 'keep',
                     flashFreq: 'keep',
                     eraseAll: false,
                     compress: true,
                     reportProgress: (fileIndex, written, total) => {
-                        log(`Progreso de escritura: ${((written / total) * 100).toFixed(1)}%`);
+                        // fileIndex 0 is otadata (erased instantly), fileIndex 1 is your actual firmware
+                        if (fileIndex === 1) {
+                            log(`Progreso de escritura: ${((written / total) * 100).toFixed(1)}%`);
+                        }
                     }
                 };
 
