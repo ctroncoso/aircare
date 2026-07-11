@@ -9,7 +9,8 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 40px auto;
-            max-width: 500px;
+            max-width: 700px;
+            /* Expanded interface width */
             line-height: 1.6;
             background-color: #f4f7f6;
             color: #333;
@@ -96,7 +97,7 @@
         <p>Conecte el ESP32 via cable USB y seleccione una opción:</p>
 
         <button id="flashBtn">Conecte y actualice la APP</button>
-        <button id="terminalBtn">Ver Terminal Serial Only</button>
+        <button id="terminalBtn">Ver Terminal Serial</button>
 
         <div id="log">Ready. Connect device to begin...</div>
     </div>
@@ -120,22 +121,25 @@
         }
 
         // --- Reusable Serial Terminal Monitor Logic ---
-        async function startTerminalMonitor(port) {
+        async function startTerminalMonitor(port, shouldReset = false) {
             try {
-                // If the port is already open (e.g. from a previous crash), close it first
+                // If the port is already open, close it first
                 if (port.readable) {
                     await port.close();
                 }
 
-                // Open port cleanly at application runtime rate (115200 is standard)
+                // Open port cleanly at application runtime rate
                 await port.open({ baudRate: 115200 });
-                
-                // Force a hardware reset toggle on the ESP32 EN/RST wire so it boots cleanly
-                await port.setSignals({ dataTerminalReady: false, requestToSend: true });
-                await new Promise(resolve => setTimeout(resolve, 100));
-                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
 
-                log("\n--- TERMINAL ABIERTA (Salida del ESP32 abajo) ---\n");
+                if (shouldReset) {
+                    // Force a hardware reset toggle on the ESP32 EN/RST wire so it boots cleanly
+                    await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                    log("\n--- TERMINAL ABIERTA (Reiniciando dispositivo...) ---\n");
+                } else {
+                    log("\n--- TERMINAL ABIERTA (Conexión directa, sin reinicio) ---\n");
+                }
 
                 const textDecoder = new TextDecoderStream();
                 const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
@@ -208,13 +212,13 @@
                 await esploader.writeFlash(flashOptions);
 
                 log("\n🎉 EXITO! Su ESP32 ha sido actualizado con éxito.");
-                
+
                 log("\n🔄 Reiniciando dispositivo e iniciando terminal...");
                 await transport.disconnect();
-                await new Promise(resolve => setTimeout(resolve, 500)); 
+                await new Promise(resolve => setTimeout(resolve, 500));
 
-                // Start terminal right after flashing using the same port object
-                await startTerminalMonitor(port);
+                // Start terminal and pass 'true' to trigger a reset after flashing
+                await startTerminalMonitor(port, true);
 
             } catch (err) {
                 log(`\n❌ Error: ${err.message}`);
@@ -231,9 +235,9 @@
             try {
                 log("🔌 Seleccione el puerto serial para escuchar...");
                 const port = await navigator.serial.requestPort();
-                
-                // Directly launch terminal stream loop
-                await startTerminalMonitor(port);
+
+                // Directly launch terminal stream loop with 'false' to avoid hardware resetting
+                await startTerminalMonitor(port, false);
             } catch (err) {
                 log(`\n❌ Error: ${err.message}`);
                 setButtonsDisabled(false);
