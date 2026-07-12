@@ -184,7 +184,7 @@
                 log("⚡ Conectando al chip...");
                 const esploader = new ESPLoader({
                     transport: transport,
-                    baudrate: 460800,
+                    baudrate: 115200,
                     terminal: {
                         clean: () => logDiv.innerText = '',
                         write: (data) => logDiv.innerText += data,
