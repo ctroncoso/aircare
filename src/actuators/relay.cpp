@@ -32,6 +32,14 @@ namespace relay
     {
         pinMode(rlPin1, OUTPUT);
         pinMode(rlPin2, OUTPUT);
-        set(false); // default OFF (high)
+        // Drive the OFF level explicitly. g_state already defaults to false, so
+        // the edge-triggered set(false) below would be a no-op and leave the
+        // pins at their power-on level (LOW on ESP32). For an active-low relay
+        // module that means the relay would stay energized ON at boot even
+        // though the scheduler/logical state reports OFF. Force HIGH so the
+        // relay is genuinely de-energized out of reset.
+        digitalWrite(rlPin1, HIGH);
+        digitalWrite(rlPin2, HIGH);
+        g_state = false;
     }
 }
