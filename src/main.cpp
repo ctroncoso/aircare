@@ -9,8 +9,9 @@
 #include "otaHelper.h"
 #include "OneButton.h"
 #include "mainHelper.h"
-#include "scheduleHelper.h"
+#include "config/schedule.h"
 #include "configHelper.h"   // dynamic MQTT broker (cfg::)
+#include "actuators/relay.h"
 #include "core/events.h"
 
 #include "ESP32OTAPull.h"
@@ -62,13 +63,9 @@ void setup()
   leds::initLEDS();                 // in globals.h
   leds::POSTBlinks();
 
-    // Configure relay/load pins as outputs BEFORE the scheduler runs, so the
-    // first applyRelay() at boot drives the real physical state (and keeps
-    // rl1State/rl2State consistent with the hardware).
-    pinMode(rlPin1, OUTPUT);
-    pinMode(rlPin2, OUTPUT);
-    digitalWrite(rlPin1, HIGH); // turn off fan
-    digitalWrite(rlPin2, HIGH); // turn off UV
+    // Configure relay/load pins as outputs and default them OFF, BEFORE the
+    // scheduler runs so the first applyRelay() at boot drives real hardware.
+    relay::init();
 
     int wifi_level;
 

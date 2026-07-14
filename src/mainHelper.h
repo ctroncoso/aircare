@@ -6,7 +6,8 @@
 #include "sunriseHelper.h"
 #include "mqttHelper.h"
 #include "otaHelper.h"
-#include "scheduleHelper.h"
+#include "config/schedule.h"
+#include "actuators/relay.h"
 
 void printValues();
 void readValues();
@@ -50,8 +51,8 @@ void printValues()
   doc["time"] = ntp::getTime();
   doc["uptime"] = millis();
   doc["mac"] = WiFi.macAddress();
-  doc["rl1"] = int(rl1State);
-  doc["rl2"] = int(rl2State);
+  doc["rl1"] = int(relay::state());
+  doc["rl2"] = int(relay::state());
   doc["sched_mode"] = sched::modeToString(sched::mode);
   doc["sched_ovr"]  = sched::overrideToString(sched::override);
   doc["sched_exc"]  = sched::excCount;

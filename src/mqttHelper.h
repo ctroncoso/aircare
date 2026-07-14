@@ -1,7 +1,7 @@
 #pragma once
 
 #include "globals.h"
-#include "scheduleHelper.h"  // for sched::parseDate() used in the EXCEPTION command
+#include "config/schedule.h"  // for sched::parseDate() used in the EXCEPTION command
 #include "configHelper.h"    // for cfg::brokerHost / cfg::brokerPort (dynamic broker)
 #include "core/events.h"
 #include <PubSubClient.h>

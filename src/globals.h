@@ -8,14 +8,12 @@
 // events.h is the event bus that replaces the volatile handshake globals below.
 #include "core/events.h"
 
-// Filter schedule (event-driven) — see src/scheduleHelper.h.
-// The relay's desired state is owned by the sched:: engine; these globals only
-// mirror the physical relay state for telemetry. The previous FILTER_ON_HHMM /
-// FILTER_OFF_HHMM / LUNCH_START_HHMM / LUNCH_END_HHMM globals were replaced by a
-// per-device Mode (auto/on/off) + weekly window list + MQTT override.
-
-bool rl1State;
-bool rl2State;
+// Filter schedule (event-driven) — see config/schedule.h.
+// The relay's desired state is owned by the sched:: engine and applied via the
+// actuators/relay module; telemetry reads relay::state(). The previous
+// FILTER_ON_HHMM / FILTER_OFF_HHMM / LUNCH_START_HHMM / LUNCH_END_HHMM globals
+// were replaced by a per-device Mode (auto/on/off) + weekly window list + MQTT
+// override. rl1State/rl2State now live in actuators/relay.cpp.
 
 JsonDocument doc;
 char serializedString[300];
