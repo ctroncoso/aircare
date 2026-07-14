@@ -26,6 +26,14 @@ namespace ntp{
     void timeavailable(struct timeval *t);
     void setupNTP();
 
+    /// @brief True once SNTP has completed at least one successful sync.
+    /// Uses the authoritative esp_sntp sync status rather than guessing from
+    /// the epoch value, so callers (e.g. the scheduler) only act on real time.
+    bool timeSynced()
+    {
+        return sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+    }
+
 
     void initNTP()
     {

@@ -46,14 +46,24 @@ void setup()
  * 
  */
   leds::initLEDS();                 // in globals.h
-  int wifi_level;
+  leds::POSTBlinks();
 
-  // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
-  if (!wifiM::initWifiM())
-  {
-    delay(180000);
-    ESP.restart();
-  }
+    // Configure relay/load pins as outputs BEFORE the scheduler runs, so the
+    // first applyRelay() at boot drives the real physical state (and keeps
+    // rl1State/rl2State consistent with the hardware).
+    pinMode(rlPin1, OUTPUT);
+    pinMode(rlPin2, OUTPUT);
+    digitalWrite(rlPin1, HIGH); // turn off fan
+    digitalWrite(rlPin2, HIGH); // turn off UV
+
+    int wifi_level;
+
+    // Start Wifi Manager. Attempt to connect or run local AP configuration mode.
+    if (!wifiM::initWifiM())
+    {
+      delay(180000);
+      ESP.restart();
+    }
   else
   {
     wifi_level = WiFi.RSSI();
@@ -122,13 +132,6 @@ void setup()
   }   
   
   
-  // -------set relay pins to output
-  pinMode(rlPin1, OUTPUT);
-  pinMode(rlPin2, OUTPUT);
-  digitalWrite(rlPin1,HIGH);  // turn off fan
-  digitalWrite(rlPin2,HIGH);  // turn off UV
-
-
   mqtt::publishEvent(INFO, "SETUP|OK|Setup finished successfully.");
 }
 

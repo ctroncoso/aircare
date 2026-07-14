@@ -62,11 +62,11 @@ namespace sched
     };
 
     // Date-range exception (holiday / vacation / onsite testing).
-    // Dates stored as local days-since-epoch (DST-safe via mktime of midnight).
+    // Dates stored as a packed YYYYMMDD integer (DST-safe: no mktime/86400 math).
     struct Exception
     {
-        uint32_t fromDay; // inclusive start day
-        uint32_t toDay;   // inclusive end day
+        uint32_t fromDay; // inclusive start day (YYYYMMDD)
+        uint32_t toDay;   // inclusive end day (YYYYMMDD)
         bool     on;      // desired relay state during the range
     };
 
@@ -232,14 +232,22 @@ namespace sched
     }
 
     // ---------- date / exception helpers ----------
+    /// @brief True once NTP has actually synced (authoritative SNTP status),
+    /// so we never compute the timeline against pre-sync / epoch-0 time.
+    bool timeValid()
+    {
+        return ntp::timeSynced();
+    }
+
     /// @brief Local days-since-epoch for the current local time.
     uint32_t localDayNow()
     {
         time_t now = ntp::getTime();
         struct tm dt;
         localtime_r(&now, &dt);
-        dt.tm_hour = 0; dt.tm_min = 0; dt.tm_sec = 0;
-        return (uint32_t)mktime(&dt) / 86400L;
+        return (uint32_t)(dt.tm_year + 1900) * 10000
+             + (uint32_t)(dt.tm_mon + 1) * 100
+             + (uint32_t)dt.tm_mday;
     }
 
     /// @brief Parse "YYYY-MM-DD" into a local days-since-epoch value.
@@ -250,14 +258,9 @@ namespace sched
         int mo = (s[5]-'0')*10 + (s[6]-'0');
         int d  = (s[8]-'0')*10 + (s[9]-'0');
         if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
-        struct tm t = {0};
-        t.tm_year = y - 1900;
-        t.tm_mon  = mo - 1;
-        t.tm_mday = d;
-        t.tm_hour = 0; t.tm_min = 0; t.tm_sec = 0;
-        time_t epoch = mktime(&t); // local TZ (Chile, DST-aware)
-        if (epoch < 0) return false;
-        outDay = (uint32_t)epoch / 86400L;
+        // Pack as YYYYMMDD so comparisons are chronological and DST-safe
+        // (no mktime/86400 math, which breaks on DST 23h/25h days).
+        outDay = (uint32_t)y * 10000 + (uint32_t)mo * 100 + (uint32_t)d;
         return true;
     }
 
@@ -341,7 +344,9 @@ namespace sched
             struct tm ds;
             localtime_r(&dayStart, &ds);
             ds.tm_hour = 0; ds.tm_min = 0; ds.tm_sec = 0;
-            uint32_t dayNum = (uint32_t)mktime(&ds) / 86400L;
+            uint32_t dayNum = (uint32_t)(ds.tm_year + 1900) * 10000
+                            + (uint32_t)(ds.tm_mon + 1) * 100
+                            + (uint32_t)ds.tm_mday;
             bool dummy;
             if (exceptionActive(dayNum, dummy)) continue;
 
@@ -396,8 +401,10 @@ namespace sched
     }
 
     /// @brief Recompute current desired state + re-arm the transition timeline.
+    /// No-op until NTP time is valid, so we never compute/apply against epoch 0.
     void rearm()
     {
+        if (!timeValid()) return;
         lastEvalDay = localDayNow();
         bool want = desiredState();
         applyRelay(want);
@@ -486,6 +493,12 @@ namespace sched
         if (schedNeedsRearm)
         {
             schedNeedsRearm = false;
+            rearm();
+        }
+        // First valid time after boot: the initial rearm() was skipped (no time
+        // yet), so arm the timeline as soon as NTP becomes valid.
+        else if (nextTransitionTime == 0 && timeValid())
+        {
             rearm();
         }
 
