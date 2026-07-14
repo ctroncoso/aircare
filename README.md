@@ -29,6 +29,7 @@ The device reads sensor data on a configurable interval, publishes the measureme
     - [`sunriseHelper.h`](#sunrisehelperh)
     - [`ntpHelper.h`](#ntphelperh)
     - [`otaHelper.h`](#otahelperh)
+    - [`scheduleHelper.h`](#schedulehelperh)
   - [Dependencies](#dependencies)
   - [Configuration](#configuration)
 
@@ -225,6 +226,38 @@ This class provides the complete register map for the Sunrise sensor. Key public
 | `checkUpdate()`   | Checks for OTA updates by fetching an update manifest from `https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json`. If an update is available, blinks all three LEDs and downloads/installs the new firmware. Returns `false` after the check. |
 | `callback()`      | Progress callback — prints the download percentage and toggles the yellow LED during the update. |
 | `errtext(code)`   | Returns a human‑readable error string for an OTA result code. |
+
+---
+
+### `scheduleHelper.h`
+**Remote relay schedule with NVS fallback.**
+
+| Function                | Description |
+|-------------------------|-------------|
+| `initSchedule()`        | Called from `setup()` (after WiFi/NTP are up). Loads persisted values from NVS, then attempts to fetch and apply the remote schedule. Prints the active schedule. |
+| `fetchSchedule()`       | Loads values from NVS first, then (if WiFi is connected) performs an HTTPS GET of the schedule manifest, matches the entry whose `Device` equals this MCU's MAC address, applies the four times, and persists them to NVS. On any failure (no WiFi, HTTP error, JSON parse error, MAC not found) it logs a `[SCHED]` message and keeps the NVS/default values. Also called every 10 min from `updateTick()`. |
+| `loadFromNVS()`         | Reads `FILTER_ON_HHMM`, `FILTER_OFF_HHMM`, `LUNCH_START_HHMM`, `LUNCH_END_HHMM` from the `aircare` NVS namespace. |
+| `saveToNVS()`           | Persists the four schedule globals to NVS. |
+
+**Schedule configuration file** — `bins/schedule.json` (served from the GitHub repo at `https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/schedule.json`):
+
+```json
+{
+  "Schedules": [
+    {
+      "Device": "A8:42:E3:AB:10:88",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    }
+  ]
+}
+```
+
+- `Device` is the ESP32 MAC address (same format as in `update.json`).
+- Times are `HHMM` integers (e.g. `830` = 08:30, `1430` = 14:30). **Do not use leading zeros** (octal interpretation).
+- The device always boots with the last successfully persisted values from NVS (or the compiled-in defaults on first boot), so the relay schedule keeps working even when the server is unreachable. Remote changes are applied within 10 minutes and persisted.
 
 ---
 

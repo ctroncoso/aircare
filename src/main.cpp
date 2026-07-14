@@ -9,6 +9,7 @@
 #include "otaHelper.h"
 #include "OneButton.h"
 #include "mainHelper.h"
+#include "scheduleHelper.h"
 
 #include "ESP32OTAPull.h"
 
@@ -61,6 +62,9 @@ void setup()
   
   // Sinchronize time and date
   ntp::initNTP();  
+
+  // Load/fetch the relay schedule (online JSON matched by MAC, persisted to NVS).
+  sched::initSchedule();
 
 
 

@@ -17,10 +17,13 @@ const unsigned long measurementDelay = ONE_MIN;
 const unsigned long updateDelay = ONE_MIN * 10; // 10 minute delay between update check
 
 // Filter schedule — LOCAL Chile time (America/Santiago, DST-aware via POSIX TZ).
-const int FILTER_ON_HHMM   = 830;    // 08:30 local (no leading zero — leading 0 = octal!)
-const int FILTER_OFF_HHMM  = 1830;  // 18:30 local
-const int LUNCH_START_HHMM = 1230;  // 12:30 local (filter paused)
-const int LUNCH_END_HHMM   = 1430;  // 14:30 local
+// These are now mutable globals so they can be overwritten at runtime from the
+// online schedule JSON (matched by MAC) and persisted to NVS. The values below
+// act as the compiled-in defaults / fallback when no NVS entry or server is available.
+int FILTER_ON_HHMM   = 830;    // 08:30 local (no leading zero — leading 0 = octal!)
+int FILTER_OFF_HHMM  = 1830;  // 18:30 local
+int LUNCH_START_HHMM = 1230;  // 12:30 local (filter paused)
+int LUNCH_END_HHMM   = 1430;  // 14:30 local
 
 const int ledPinR = 25;
 const int ledPinY = 26;

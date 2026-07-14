@@ -1,0 +1,46 @@
+{
+  "Schedules": [
+    {
+      "Device": "A8:42:E3:AB:10:88",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    },
+    {
+      "Device": "A8:42:E3:AB:6F:40",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    },
+    {
+      "Device": "C8:F0:9E:9E:C6:6C",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    },
+    {
+      "Device": "A8:42:E3:AB:1E:04",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    },
+    {
+      "Device": "A0:A3:B3:96:EF:F0",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    },
+    {
+      "Device": "A8:42:E3:AB:70:BC",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
+    }
+  ]
+}

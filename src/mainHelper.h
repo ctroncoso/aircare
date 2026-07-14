@@ -6,6 +6,7 @@
 #include "sunriseHelper.h"
 #include "mqttHelper.h"
 #include "otaHelper.h"
+#include "scheduleHelper.h"
 
 void printValues();
 void readValues();
@@ -166,6 +167,7 @@ void updateTick()
   {
     previousTimer_2 = currentTime;
     ota::checkUpdate();
+    sched::fetchSchedule(); // re-fetch schedule (falls back to NVS on failure)
   }
 }
 
