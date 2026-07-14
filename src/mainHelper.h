@@ -89,7 +89,7 @@ void measurementTick()
     //-------------- Relay Activation section ----------------
     bool filterState;
 
-    // check if day is mon-fri between 8am and 6:30pm (time in UTC-3)
+    // check if day is mon-fri within the scheduled window (LOCAL Chile time)
     struct tm dt = ntp::getTM();
     // int mday = dt.tm_mday;
     int dow = dt.tm_wday;
@@ -102,7 +102,7 @@ void measurementTick()
     Serial.print("Hourmin is:");
     Serial.println(hourmin);
 
-    if (dow >= 1 && dow <= 5 && hourmin >= 1230 && hourmin < 2230)
+    if (dow >= 1 && dow <= 5 && hourmin >= FILTER_ON_HHMM && hourmin < FILTER_OFF_HHMM)
     {
       filterState = true;
     }
@@ -111,7 +111,7 @@ void measurementTick()
       filterState = false;
     }
 
-    if (hourmin >= 1630 && hourmin < 1830)
+    if (hourmin >= LUNCH_START_HHMM && hourmin < LUNCH_END_HHMM)
     {
       filterState = false;
     }

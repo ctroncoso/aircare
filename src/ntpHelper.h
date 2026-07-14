@@ -11,8 +11,14 @@ namespace ntp{
 
     const char* ntpServer1 = "ntp.shoa.cl";
     const char* ntpServer2 = "time.nist.gov";
-    const long  gmtOffset_sec = 0;
-    const int   daylightOffset_sec = 0;
+
+    // Chile local time (America/Santiago) with automatic daylight saving.
+    // newlib has no IANA tz database, so we use a POSIX TZ rule:
+    //   standard  CLT = UTC-4  (<-04>4)
+    //   daylight  CLST = UTC-3  (<-03>)
+    //   DST starts 1st Sunday of September at 00:00 (M9.1.6/24)
+    //   DST ends   1st Sunday of April    at 00:00 (M4.1.6/24)
+    const char* tzChile = "<-04>4<-03>,M9.1.6/24,M4.1.6/24";
 
     unsigned long getTime();
     struct tm getTM();
@@ -25,7 +31,11 @@ namespace ntp{
     {
         sntp_set_time_sync_notification_cb( timeavailable );
         sntp_servermode_dhcp(1);    // (optional)
-        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
+        // gmtOffset/daylightOffset are 0; the timezone (incl. DST) is applied
+        // via the POSIX TZ rule below so getLocalTime() returns Chile local time.
+        configTime(0, 0, ntpServer1, ntpServer2);
+        setenv("TZ", tzChile, 1);
+        tzset();
         leds::blinkLed(ledPinY,3);
         delay(1000);
     }

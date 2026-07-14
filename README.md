@@ -13,22 +13,24 @@ The device reads sensor data on a configurable interval, publishes the measureme
 
 ## Table of Contents
 
-1. [Hardware Overview](#hardware-overview)
-2. [Core Application Flow](#core-application-flow)
-3. [Modules / File Descriptions](#modules--file-descriptions)
-   - [globals.h](#globalsh)
-   - [main.cpp](#maincpp)
-   - [mainHelper.h](#mainhelperh)
-   - [wifiManagerHelper.h](#wifimanagerhelperh)
-   - [mqttHelper.h](#mqtthelperh)
-   - [ledHelper.h](#ledhelperh)
-   - [bmeHelper.h](#bmehelperh)
-   - [sunrise_i2c.h / sunrise_i2c.cpp](#sunrise_i2ch--sunrise_i2ccpp)
-   - [sunriseHelper.h](#sunrisehelperh)
-   - [ntpHelper.h](#ntphelperh)
-   - [otaHelper.h](#otahelperh)
-4. [Dependencies](#dependencies)
-5. [Configuration](#configuration)
+- [AirCare — Indoor Air Quality Monitor](#aircare--indoor-air-quality-monitor)
+  - [Table of Contents](#table-of-contents)
+  - [Hardware Overview](#hardware-overview)
+  - [Core Application Flow](#core-application-flow)
+  - [Modules / File Descriptions](#modules--file-descriptions)
+    - [`globals.h`](#globalsh)
+    - [`main.cpp`](#maincpp)
+    - [`mainHelper.h`](#mainhelperh)
+    - [`wifiManagerHelper.h`](#wifimanagerhelperh)
+    - [`mqttHelper.h`](#mqtthelperh)
+    - [`ledHelper.h`](#ledhelperh)
+    - [`bmeHelper.h`](#bmehelperh)
+    - [`sunrise_i2c.h` / `sunrise_i2c.cpp`](#sunrise_i2ch--sunrise_i2ccpp)
+    - [`sunriseHelper.h`](#sunrisehelperh)
+    - [`ntpHelper.h`](#ntphelperh)
+    - [`otaHelper.h`](#otahelperh)
+  - [Dependencies](#dependencies)
+  - [Configuration](#configuration)
 
 ---
 
@@ -93,7 +95,7 @@ The device reads sensor data on a configurable interval, publishes the measureme
 | `getCO2_State()`        | Returns a `CO2_Condition` based on the CO₂ ppm value: Green (< 700), Yellow (700–800), Red (≥ 800). |
 | `printValues()`         | Builds a JSON document with all sensor values and the current state, then serialises and prints it. |
 | `state2string()`        | Converts the current CO₂ condition to a human‑readable string. |
-| `measurementTick()`     | Called every 1 min. Evaluates the relay schedule (Mon–Fri 12:30–22:30, except 16:30–18:30), reads sensors, prints values, publishes to MQTT at `/cleanair/sensor`, and updates the LEDs. |
+| `measurementTick()`     | Called every 1 min. Evaluates the relay schedule (Mon–Fri 08:30–18:30 local Chile time, except 12:30–14:30 lunch pause), reads sensors, prints values, publishes to MQTT at `/cleanair/sensor`, and updates the LEDs. |
 | `updateTick()`          | Called every 10 min. Triggers `ota::checkUpdate()`. |
 | `testRelay()`           | Utility that activates both relays for 10 seconds, then turns them off. |
 
@@ -205,11 +207,13 @@ This class provides the complete register map for the Sunrise sensor. Key public
 
 | Function              | Description |
 |-----------------------|-------------|
-| `initNTP()`           | Configures SNTP with servers `ntp.shoa.cl` and `time.nist.gov`, sets the time‑sync notification callback, and enables DHCP server mode. Publishes an MQTT event and blinks the yellow LED 3 times. |
+| `initNTP()`           | Configures SNTP with servers `ntp.shoa.cl` and `time.nist.gov`, applies the Chile local‑time timezone rule (see below), sets the time‑sync notification callback, and enables DHCP server mode. Publishes an MQTT event and blinks the yellow LED 3 times. |
 | `getTime()`           | Returns the current Unix epoch timestamp (seconds). |
-| `getTM()`             | Returns the local time as a `struct tm`. |
+| `getTM()`             | Returns the **local Chile time** (America/Santiago, DST‑aware) as a `struct tm`. |
 | `timeavailable()`     | Callback invoked when the time is synchronised — prints the new local time. |
-| `printLocalTime()`    | Prints the current date/time to Serial in human‑readable format. |
+| `printLocalTime()`    | Prints the current **local** date/time to Serial in human‑readable format. |
+
+**Timezone:** The device runs on **Chile local time with automatic daylight saving** (CLT = UTC‑4 in winter, CLST = UTC‑3 in summer; DST starts 1st Sunday of September, ends 1st Sunday of April). newlib has no IANA tz database, so this is encoded as a POSIX TZ rule applied in `initNTP()` via `setenv("TZ", "<-04>4<-03>,M9.1.6/24,M4.1.6/24", 1); tzset();`. All scheduling and time displays use this local time.
 
 ---
 
