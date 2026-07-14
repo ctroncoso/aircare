@@ -1,6 +1,6 @@
 # AirCare — Indoor Air Quality Monitor
 
-**Version:** 1.1.11 | **Board:** ESP32 Dev Module | **Framework:** Arduino
+**Version:** 1.1.12 | **Board:** ESP32 Dev Module | **Framework:** Arduino
 
 AirCare is an IoT firmware for the ESP32 microcontroller that monitors indoor air quality using two main sensors:
 
@@ -96,7 +96,7 @@ The device reads sensor data on a configurable interval, publishes the measureme
 | `getCO2_State()`        | Returns a `CO2_Condition` based on the CO₂ ppm value: Green (< 700), Yellow (700–800), Red (≥ 800). |
 | `printValues()`         | Builds a JSON document with all sensor values and the current state, then serialises and prints it. |
 | `state2string()`        | Converts the current CO₂ condition to a human‑readable string. |
-| `measurementTick()`     | Called every 1 min. Evaluates the relay schedule (Mon–Fri 08:30–18:30 local Chile time, except 12:30–14:30 lunch pause), reads sensors, prints values, publishes to MQTT at `/cleanair/sensor`, and updates the LEDs. |
+| `measurementTick()`     | Called every 1 min. Reads sensors, prints values (including `sched_mode`, `sched_ovr`, `sched_exc` and the "next transition" line), publishes to MQTT at `/cleanair/sensor`, and updates the LEDs. The relay itself is driven by the event-driven `sched::tick()` (see `scheduleHelper.h`), not here. |
 | `updateTick()`          | Called every 10 min. Triggers `ota::checkUpdate()`. |
 | `testRelay()`           | Utility that activates both relays for 10 seconds, then turns them off. |
 
@@ -121,11 +121,16 @@ The device reads sensor data on a configurable interval, publishes the measureme
 | `mqttreconnect()`     | Tries to reconnect to the MQTT broker up to 12 times (5 s apart). Restarts the MCU if all attempts fail. |
 | `mqttPublish()`       | Publishes a string payload to a given MQTT topic. Calls `mqttreconnect()` if the client is disconnected. |
 | `publishEvent()`      | Constructs a JSON event (`event`, `param`, `mac`, `fw`) and publishes it to `cleanair/events`. |
-| `callback()`          | Handles incoming MQTT messages — prints the topic and payload to Serial. |
+| `callback()`          | Handles incoming MQTT commands (see below) and prints the topic/payload to Serial. |
 
 **Subscribed topics on connect:**
 - `AirCare/inCommands/broadcast`
 - `AirCare/inCommands/<MAC address>`
+
+**Remote commands** (JSON payloads):
+- `{"cmd":"RELAY","value":"ON"|"OFF"|"AUTO"}` — sticky manual override. `ON`/`OFF` force the relay regardless of schedule; `AUTO` clears the override and returns control to the schedule. Persisted to NVS.
+- `{"cmd":"EXCEPTION","from":"YYYY-MM-DD","to":"YYYY-MM-DD","state":"on"|"off"}` — add a date-range exception (holiday / vacation / onsite testing). Persisted to NVS; auto-expires and round-robins when the 4-slot list is full.
+- `{"cmd":"EXCEPTION_CLEAR"}` — remove all exceptions.
 
 ---
 
@@ -230,14 +235,22 @@ This class provides the complete register map for the Sunrise sensor. Key public
 ---
 
 ### `scheduleHelper.h`
-**Remote relay schedule with NVS fallback.**
+**Event-driven relay scheduler (replaces the old per-minute HHMM polling).**
+
+The relay's desired state is *evaluated* (never replayed), so NTP jumps or missed ticks always land in the correct state. `loop()` calls `sched::tick()` every iteration; it fires a transition only when its pre-computed edge is due (edge-triggered, no relay chatter).
+
+**Precedence (highest → lowest):** sticky MQTT `RELAY` override → date-range `Exceptions` → `Mode` (`auto`/`on`/`off`) + weekly windows.
 
 | Function                | Description |
 |-------------------------|-------------|
 | `initSchedule()`        | Called from `setup()` (after WiFi/NTP are up). Loads persisted values from NVS, then attempts to fetch and apply the remote schedule. Prints the active schedule. |
-| `fetchSchedule()`       | Loads values from NVS first, then (if WiFi is connected) performs an HTTPS GET of the schedule manifest, matches the entry whose `Device` equals this MCU's MAC address, applies the four times, and persists them to NVS. On any failure (no WiFi, HTTP error, JSON parse error, MAC not found) it logs a `[SCHED]` message and keeps the NVS/default values. Also called every 10 min from `updateTick()`. |
-| `loadFromNVS()`         | Reads `FILTER_ON_HHMM`, `FILTER_OFF_HHMM`, `LUNCH_START_HHMM`, `LUNCH_END_HHMM` from the `aircare` NVS namespace. |
-| `saveToNVS()`           | Persists the four schedule globals to NVS. |
+| `fetchSchedule()`       | Loads values from NVS first, then (if WiFi is connected) performs an HTTPS GET of the schedule manifest, matches the entry whose `Device` equals this MCU's MAC address, applies the `Mode`/windows/`Exceptions`, and persists them to NVS. On any failure it logs a `[SCHED]` message and keeps the NVS/default values. Also called every 10 min from `updateTick()`. |
+| `tick()`                | Called every `loop()`. Consumes the handshake flags (NTP re-sync, MQTT override, MQTT exception, local midnight rollover), fires the next scheduled transition when due, and re-arms the timeline. |
+| `desiredState()`        | Computes the relay state from the precedence chain above. |
+| `computeNextTransition()` | Scans up to 7 days for the next ON/OFF window edge and stores it as `nextTransitionTime`. |
+| `printNextTransition()` | Prints the "next transition in …" line after `Current State:` in the reading cycle. |
+| `loadFromNVS()` / `saveToNVS()` | Persist `Mode`, override, `daysMask`, windows, and exceptions to the `aircare` NVS namespace. |
+| `pruneExpiredExceptions()` / `evictOldestException()` | Self-cleaning: drop exceptions whose range has ended; round-robin evict the oldest if the list is full. |
 
 **Schedule configuration file** — `bins/schedule.json` (served from the GitHub repo at `https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/schedule.json`):
 
@@ -246,17 +259,26 @@ This class provides the complete register map for the Sunrise sensor. Key public
   "Schedules": [
     {
       "Device": "A8:42:E3:AB:10:88",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      },
+      "Exceptions": [
+        { "from": "2026-07-20", "to": "2026-08-10", "state": "off" },
+        { "from": "2026-09-18", "to": "2026-09-18", "state": "on" }
+      ]
     }
   ]
 }
 ```
 
 - `Device` is the ESP32 MAC address (same format as in `update.json`).
-- Times are `HHMM` integers (e.g. `830` = 08:30, `1430` = 14:30). **Do not use leading zeros** (octal interpretation).
+- `Mode` — `"auto"` (follow weekly windows), `"on"` (constant ON), or `"off"` (constant OFF).
+- `Auto.days` — 7-char Mon→Sun bitmask (`1` = schedule active that weekday). `"1111100"` = Mon–Fri.
+- `Auto.windows` — list of `["HH:MM","HH:MM"]` ON intervals for active days. **Arbitrary number** of windows/day; the lunch pause is simply the gap between two windows.
+- `Exceptions` *(optional)* — date-range overrides (holiday / vacation / onsite testing). `from`/`to` are inclusive `YYYY-MM-DD`; `state` is `"on"` or `"off"`. Up to 4 are kept; expired ones auto-drop at midnight and the oldest is evicted round-robin if still full.
+- **Legacy shim:** entries using the old `FilterOn`/`FilterOff`/`LunchStart`/`LunchEnd` `HHMM` fields are still accepted and converted to `auto` with two windows `[On..LunchStart]` + `[LunchEnd..Off]`.
 - The device always boots with the last successfully persisted values from NVS (or the compiled-in defaults on first boot), so the relay schedule keeps working even when the server is unreachable. Remote changes are applied within 10 minutes and persisted.
 
 ---

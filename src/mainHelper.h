@@ -52,10 +52,14 @@ void printValues()
   doc["mac"] = WiFi.macAddress();
   doc["rl1"] = int(rl1State);
   doc["rl2"] = int(rl2State);
+  doc["sched_mode"] = sched::modeToString(sched::mode);
+  doc["sched_ovr"]  = sched::overrideToString(sched::override);
+  doc["sched_exc"]  = sched::excCount;
   doc["fw"] = PROGRAM_VERSION;
   serializeJson(doc, serializedString);
   Serial.println(serializedString);
   Serial.printf("Current State: %s \r\n", state2string());
+  sched::printNextTransition();
 }
 
 String state2string()
@@ -87,61 +91,9 @@ void measurementTick()
   {
     previousTimer_1 = currentTime;
 
-    //-------------- Relay Activation section ----------------
-    bool filterState;
-
-    // check if day is mon-fri within the scheduled window (LOCAL Chile time)
-    struct tm dt = ntp::getTM();
-    // int mday = dt.tm_mday;
-    int dow = dt.tm_wday;
-    int hour = dt.tm_hour;
-    int minute = dt.tm_min;
-    int hourmin = hour * 100 + minute;
-
-    Serial.print("DOW is: ");
-    Serial.println(dow);
-    Serial.print("Hourmin is:");
-    Serial.println(hourmin);
-
-    if (dow >= 1 && dow <= 5 && hourmin >= FILTER_ON_HHMM && hourmin < FILTER_OFF_HHMM)
-    {
-      filterState = true;
-    }
-    else
-    {
-      filterState = false;
-    }
-
-    if (hourmin >= LUNCH_START_HHMM && hourmin < LUNCH_END_HHMM)
-    {
-      filterState = false;
-    }
-
-    // filterState = false;  // Filters disconnnected for sample taking.
-
-    // if (dt.tm_mon == 8 && dt.tm_mday >= 18 && dt.tm_mday <= 20)
-    // {
-    //   Serial.println("Exception: relay will be off today");
-    //   filterState = filterState && false;
-    // }
-
-    if (filterState)
-    {
-      Serial.println("fan and UV ACTIVATED");
-      digitalWrite(rlPin1, LOW); // turn on fan
-      digitalWrite(rlPin2, LOW); // turn on UV
-      rl1State = 1;
-      rl2State = 1;
-    }
-    else
-    {
-      Serial.println("fan and UV DEACTIVATED");
-      digitalWrite(rlPin1, HIGH); // turn off fan
-      digitalWrite(rlPin2, HIGH); // turn off UV
-      rl1State = 0;
-      rl2State = 0;
-    }
-    //----------------------------------
+    // Relay state is owned by the event-driven sched:: engine (see
+    // scheduleHelper.h). We only read the resulting rl1State/rl2State for
+    // telemetry; we never drive the pins from here.
 
     readValues();
     co2_State = getCO2_State(sunriseH::co2_fc);

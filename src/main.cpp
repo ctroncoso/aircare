@@ -139,6 +139,7 @@ void loop()
 
   button.tick();
   measurementTick();
+  sched::tick();   // event-driven relay scheduler: fire transitions at their edges
   updateTick(); // check for updates and install.
 
   //-------------MQTT

@@ -16,14 +16,11 @@
 const unsigned long measurementDelay = ONE_MIN;
 const unsigned long updateDelay = ONE_MIN * 10; // 10 minute delay between update check
 
-// Filter schedule — LOCAL Chile time (America/Santiago, DST-aware via POSIX TZ).
-// These are now mutable globals so they can be overwritten at runtime from the
-// online schedule JSON (matched by MAC) and persisted to NVS. The values below
-// act as the compiled-in defaults / fallback when no NVS entry or server is available.
-int FILTER_ON_HHMM   = 830;    // 08:30 local (no leading zero — leading 0 = octal!)
-int FILTER_OFF_HHMM  = 1830;  // 18:30 local
-int LUNCH_START_HHMM = 1230;  // 12:30 local (filter paused)
-int LUNCH_END_HHMM   = 1430;  // 14:30 local
+// Filter schedule (event-driven) — see src/scheduleHelper.h.
+// The relay's desired state is owned by the sched:: engine; these globals only
+// mirror the physical relay state for telemetry. The previous FILTER_ON_HHMM /
+// FILTER_OFF_HHMM / LUNCH_START_HHMM / LUNCH_END_HHMM globals were replaced by a
+// per-device Mode (auto/on/off) + weekly window list + MQTT override.
 
 const int ledPinR = 25;
 const int ledPinY = 26;
@@ -53,6 +50,21 @@ WiFiManager wm;
 unsigned long previousTimer_1 = 0;
 unsigned long previousTimer_2 = 0;
 unsigned long previousTimer_mqtt = 0;   // gate for periodic MQTT reconnect attempts
+
+// Event-driven scheduler handshake flags (set by other modules, consumed by
+// sched::tick() so there is no cross-header include coupling):
+//   schedNeedsRearm : NTP (re)synced — recompute relay state + timeline.
+//   pendingRelayCmd : 0=none, 1=ON, 2=OFF, 3=AUTO (MQTT override request).
+//   pendingException / pendingExceptionClear : MQTT date-range exception request.
+//   pendingExcFrom/To : inclusive local days-since-epoch of the requested range.
+//   pendingExcOn     : desired relay state during the range (true=ON).
+volatile bool schedNeedsRearm = false;
+volatile int  pendingRelayCmd = 0;
+volatile bool pendingException = false;
+volatile bool pendingExceptionClear = false;
+volatile uint32_t pendingExcFrom = 0;
+volatile uint32_t pendingExcTo = 0;
+volatile bool pendingExcOn = false;
 
 enum pub_event
 {

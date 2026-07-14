@@ -56,6 +56,10 @@ namespace ntp{
     {
         Serial.println("Got time adjustment from NTP!");
         printLocalTime();
+        // Signal the scheduler to re-evaluate its timeline now that local time
+        // is (re)synced — catches DST changes and the initial sync. Consumed
+        // in sched::tick() to avoid a cross-header include cycle.
+        schedNeedsRearm = true;
     }
 
     void printLocalTime()

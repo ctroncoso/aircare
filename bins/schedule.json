@@ -2,52 +2,63 @@
   "Schedules": [
     {
       "Device": "A8:42:E3:AB:10:88",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      },
+      "Exceptions": [
+        { "from": "2026-07-20", "to": "2026-08-10", "state": "off" },
+        { "from": "2026-09-18", "to": "2026-09-18", "state": "on" }
+      ]
     },
     {
       "Device": "A8:42:E3:AB:6F:40",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      }
     },
     {
       "Device": "C8:F0:9E:9E:C6:6C",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      }
     },
     {
       "Device": "A8:42:E3:AB:1E:04",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      }
     },
     {
       "Device": "A0:A3:B3:96:EF:F0",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      }
     },
     {
       "Device": "A8:42:E3:AB:70:BC",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      }
     },
     {
       "Device": "C8:F0:9E:9E:38:40",
-      "FilterOn": 830,
-      "FilterOff": 1830,
-      "LunchStart": 1230,
-      "LunchEnd": 1430
+      "Mode": "auto",
+      "Auto": {
+        "days": "1111100",
+        "windows": [["08:30", "12:30"], ["14:30", "18:30"]]
+      }
     }
   ]
 }

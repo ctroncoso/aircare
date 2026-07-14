@@ -1,6 +1,7 @@
 #pragma once
 
 #include "globals.h"
+#include "scheduleHelper.h"  // for sched::parseDate() used in the EXCEPTION command
 #include <PubSubClient.h>
 
 namespace mqtt
@@ -114,10 +115,70 @@ namespace mqtt
     memcpy(strpayload, payload, length);
     strpayload[length]=0;
     Serial.println(strpayload);
-    //free(strpayload);
-    // for (int i=0;i<length;i++) {
-    //   Serial.print((char)payload[i]);
-    // }
-    // Serial.println();
+
+    // Parse remote commands, e.g. {"cmd":"RELAY","value":"ON|OFF|AUTO"}.
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, strpayload);
+    if (err)
+    {
+      Serial.printf("MQTT: callback JSON parse error: %s\n", err.c_str());
+      return;
+    }
+
+    const char* cmd = doc["cmd"] | "";
+    if (strcmp(cmd, "RELAY") == 0)
+    {
+      const char* value = doc["value"] | "";
+      if (strcmp(value, "ON") == 0)
+      {
+        pendingRelayCmd = 1; // sched::Override::ON
+        publishEvent(INFO, "RELAY|OVERRIDE_ON|Manual override ON via MQTT");
+      }
+      else if (strcmp(value, "OFF") == 0)
+      {
+        pendingRelayCmd = 2; // sched::Override::OFF
+        publishEvent(INFO, "RELAY|OVERRIDE_OFF|Manual override OFF via MQTT");
+      }
+      else if (strcmp(value, "AUTO") == 0)
+      {
+        pendingRelayCmd = 3; // sched::Override::NONE
+        publishEvent(INFO, "RELAY|AUTO|Override cleared, back to schedule");
+      }
+      else
+      {
+        Serial.printf("MQTT: unknown RELAY value '%s'\n", value);
+      }
+    }
+    else if (strcmp(cmd, "EXCEPTION") == 0)
+    {
+      // {"cmd":"EXCEPTION","from":"2026-07-20","to":"2026-08-10","state":"off"}
+      const char* from = doc["from"] | "";
+      const char* to   = doc["to"]   | "";
+      const char* st   = doc["state"] | "off";
+      uint32_t fd = 0, td = 0;
+      if (sched::parseDate(from, fd) && sched::parseDate(to, td))
+      {
+        pendingException = true;
+        pendingExceptionClear = false;
+        pendingExcFrom = fd;
+        pendingExcTo   = td;
+        pendingExcOn   = (strcmp(st, "on") == 0);
+        publishEvent(INFO, String("EXCEPTION|SET|") + st + " " + from + ".." + to);
+      }
+      else
+      {
+        Serial.printf("MQTT: bad EXCEPTION dates '%s'..'%s'\n", from, to);
+      }
+    }
+    else if (strcmp(cmd, "EXCEPTION_CLEAR") == 0)
+    {
+      pendingException = true;
+      pendingExceptionClear = true;
+      publishEvent(INFO, "EXCEPTION|CLEAR|All exceptions cleared via MQTT");
+    }
+    else
+    {
+      Serial.printf("MQTT: unknown cmd '%s'\n", cmd);
+    }
   }
 }
