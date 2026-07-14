@@ -1,10 +1,10 @@
 #pragma once
 
 #include "globals.h"
-#include <Preferences.h>
+#include "core/nvsStore.h"
+#include "core/httpFetch.h"
+#include "core/events.h"
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
 #include <ArduinoJson.h>
 
 /**
@@ -35,7 +35,7 @@ namespace cfg
     const char *FALLBACK_BROKER = "52.23.110.164";
     const int   FALLBACK_PORT   = 1883;
 
-    // ---------- NVS ----------
+    // ---------- NVS keys ----------
     const char *nvsNamespace = "aircare";
     const char *nvsKeyBroker = "cfg_brk"; // null-terminated hostname string
     const char *nvsKeyPort   = "cfg_prt"; // int port
@@ -44,43 +44,24 @@ namespace cfg
     char   brokerHost[64] = {0}; // resolved broker hostname/IP
     int    brokerPort     = FALLBACK_PORT;
 
-    Preferences prefs;
-
     // ---------- persistence ----------
     void saveToNVS()
     {
-        if (prefs.begin(nvsNamespace, false))
-        {
-            prefs.putString(nvsKeyBroker, String(brokerHost));
-            prefs.putInt(nvsKeyPort, brokerPort);
-            prefs.end();
-            Serial.printf("[CFG] Saved NVS: broker=%s port=%d\n", brokerHost, brokerPort);
-        }
-        else
-        {
-            Serial.println("[CFG] Failed to open NVS (write).");
-        }
+        nvs::putString(nvsNamespace, nvsKeyBroker, String(brokerHost));
+        nvs::putInt(nvsNamespace, nvsKeyPort, brokerPort);
+        Serial.printf("[CFG] Saved NVS: broker=%s port=%d\n", brokerHost, brokerPort);
     }
 
     void loadFromNVS()
     {
-        if (prefs.begin(nvsNamespace, true))
+        String b = nvs::getString(nvsNamespace, nvsKeyBroker, FALLBACK_BROKER);
+        if (b.length() > 0)
         {
-            if (prefs.isKey(nvsKeyBroker))
-            {
-                String b = prefs.getString(nvsKeyBroker, FALLBACK_BROKER);
-                strncpy(brokerHost, b.c_str(), sizeof(brokerHost) - 1);
-                brokerHost[sizeof(brokerHost) - 1] = '\0';
-                brokerPort = prefs.getInt(nvsKeyPort, FALLBACK_PORT);
-                prefs.end();
-                Serial.printf("[CFG] Loaded NVS: broker=%s port=%d\n", brokerHost, brokerPort);
-                return;
-            }
-            prefs.end();
-        }
-        else
-        {
-            Serial.println("[CFG] Failed to open NVS (read).");
+            strncpy(brokerHost, b.c_str(), sizeof(brokerHost) - 1);
+            brokerHost[sizeof(brokerHost) - 1] = '\0';
+            brokerPort = nvs::getInt(nvsNamespace, nvsKeyPort, FALLBACK_PORT);
+            Serial.printf("[CFG] Loaded NVS: broker=%s port=%d\n", brokerHost, brokerPort);
+            return;
         }
         // No persisted value: seed from compiled fallback.
         strncpy(brokerHost, FALLBACK_BROKER, sizeof(brokerHost) - 1);
@@ -122,69 +103,17 @@ namespace cfg
         beforeHost[sizeof(beforeHost) - 1] = '\0';
         int beforePort = brokerPort;
 
-        if (WiFi.status() != WL_CONNECTED)
-        {
-            Serial.println("[CFG] WiFi not connected — keeping NVS/fallback values.");
-            return;
-        }
-
-        WiFiClientSecure client;
-        client.setInsecure();
-        HTTPClient https;
-        https.setConnectTimeout(5000);
-        https.setTimeout(5000);
-        if (!https.begin(client, configURL))
-        {
-            Serial.println("[CFG] HTTPS begin failed — keeping NVS/fallback values.");
-            return;
-        }
-
-        int httpCode = https.GET();
-        if (httpCode != HTTP_CODE_OK)
-        {
-            Serial.printf("[CFG] HTTP GET failed (code %d) — keeping NVS/fallback values.\n", httpCode);
-            https.end();
-            return;
-        }
-
-        String payload = https.getString();
-        https.end();
-
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, payload);
-        if (err)
+        http::FetchResult res = http::fetchJsonByMac(configURL, WiFi.macAddress().c_str(), doc);
+        if (!res.ok)
         {
-            Serial.printf("[CFG] JSON parse error: %s — keeping NVS/fallback values.\n", err.c_str());
-            return;
+            Serial.println("[CFG] Fetch failed — keeping NVS/fallback values.");
         }
-
-        bool resolved = false;
-        const char *myMac = WiFi.macAddress().c_str();
-        JsonArray devices = doc["Devices"];
-        for (JsonObject entry : devices)
+        else if (!res.entry.isNull())
         {
-            const char *device = entry["Device"] | "";
-            if (strcmp(device, myMac) == 0)
-            {
-                applyEntry(entry);
-                resolved = true;
-                Serial.println("[CFG] Matched device-specific broker entry.");
-                break;
-            }
+            applyEntry(res.entry);
         }
-
-        if (!resolved)
-        {
-            JsonObject def = doc["Default"];
-            if (!def.isNull())
-            {
-                applyEntry(def);
-                resolved = true;
-                Serial.println("[CFG] Using Default broker entry.");
-            }
-        }
-
-        if (!resolved)
+        else
         {
             Serial.println("[CFG] No Default or matching entry — keeping NVS/fallback values.");
         }
@@ -193,10 +122,11 @@ namespace cfg
         saveToNVS();
 
         // If the resolved broker differs from what we had at the start of this
-        // fetch, signal the main loop to reconnect to the new endpoint.
+        // fetch, notify the main loop (via the event bus) to reconnect to the
+        // new endpoint. Replaces the old `mqttNeedsReconnect` global handshake.
         if (strcmp(brokerHost, beforeHost) != 0 || brokerPort != beforePort)
         {
-            mqttNeedsReconnect = true;
+            events::emit(Evt::BrokerChanged);
             Serial.printf("[CFG] Broker changed -> %s:%d (reconnect pending)\n", brokerHost, brokerPort);
         }
     }

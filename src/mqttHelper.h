@@ -3,6 +3,7 @@
 #include "globals.h"
 #include "scheduleHelper.h"  // for sched::parseDate() used in the EXCEPTION command
 #include "configHelper.h"    // for cfg::brokerHost / cfg::brokerPort (dynamic broker)
+#include "core/events.h"
 #include <PubSubClient.h>
 
 namespace mqtt
@@ -134,17 +135,19 @@ namespace mqtt
       const char* value = doc["value"] | "";
       if (strcmp(value, "ON") == 0)
       {
-        pendingRelayCmd = 1; // sched::Override::ON
+        bool on = true;
+        events::emit(Evt::RelayOverride, &on); // sched::Override::ON
         publishEvent(INFO, "RELAY|OVERRIDE_ON|Manual override ON via MQTT");
       }
       else if (strcmp(value, "OFF") == 0)
       {
-        pendingRelayCmd = 2; // sched::Override::OFF
+        bool on = false;
+        events::emit(Evt::RelayOverride, &on); // sched::Override::OFF
         publishEvent(INFO, "RELAY|OVERRIDE_OFF|Manual override OFF via MQTT");
       }
       else if (strcmp(value, "AUTO") == 0)
       {
-        pendingRelayCmd = 3; // sched::Override::NONE
+        events::emit(Evt::RelayAuto); // sched::Override::NONE
         publishEvent(INFO, "RELAY|AUTO|Override cleared, back to schedule");
       }
       else
@@ -161,11 +164,8 @@ namespace mqtt
       uint32_t fd = 0, td = 0;
       if (sched::parseDate(from, fd) && sched::parseDate(to, td))
       {
-        pendingException = true;
-        pendingExceptionClear = false;
-        pendingExcFrom = fd;
-        pendingExcTo   = td;
-        pendingExcOn   = (strcmp(st, "on") == 0);
+        ExceptionReq req{fd, td, (strcmp(st, "on") == 0)};
+        events::emit(Evt::ExceptionSet, &req);
         publishEvent(INFO, String("EXCEPTION|SET|") + st + " " + from + ".." + to);
       }
       else
@@ -175,8 +175,7 @@ namespace mqtt
     }
     else if (strcmp(cmd, "EXCEPTION_CLEAR") == 0)
     {
-      pendingException = true;
-      pendingExceptionClear = true;
+      events::emit(Evt::ExceptionClear);
       publishEvent(INFO, "EXCEPTION|CLEAR|All exceptions cleared via MQTT");
     }
     else

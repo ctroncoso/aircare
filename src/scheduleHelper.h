@@ -2,10 +2,10 @@
 
 #include "globals.h"
 #include "ntpHelper.h"
-#include <Preferences.h>
+#include "core/nvsStore.h"
+#include "core/httpFetch.h"
+#include "core/events.h"
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
 
@@ -97,8 +97,6 @@ namespace sched
 
     uint32_t  lastEvalDay = 0; // local day of last re-evaluation (for midnight rollover)
 
-    Preferences prefs;
-
     // ---------- helpers ----------
     int hhmmToMin(int hhmm)
     {
@@ -148,87 +146,63 @@ namespace sched
     // ---------- persistence ----------
     void saveToNVS()
     {
-        if (prefs.begin(nvsNamespace, false))
+        nvs::putInt(nvsNamespace, nvsKeyMode, (int)mode);
+        nvs::putInt(nvsNamespace, nvsKeyOverride, (int)override);
+        nvs::putInt(nvsNamespace, nvsKeyDays, (int)daysMask);
+        nvs::putInt(nvsNamespace, nvsKeyWinCount, winCount);
+        // Pack windows into a single int array: [start0,end0,start1,end1,...]
+        int buf[16] = {0};
+        for (int i = 0; i < winCount && i < 8; i++)
         {
-            prefs.putInt(nvsKeyMode, (int)mode);
-            prefs.putInt(nvsKeyOverride, (int)override);
-            prefs.putInt(nvsKeyDays, (int)daysMask);
-            prefs.putInt(nvsKeyWinCount, winCount);
-            // Pack windows into a single int array: [start0,end0,start1,end1,...]
-            int buf[16] = {0};
-            for (int i = 0; i < winCount && i < 8; i++)
-            {
-                buf[i * 2]     = windows[i].startMin;
-                buf[i * 2 + 1] = windows[i].endMin;
-            }
-            prefs.putBytes(nvsKeyWins, buf, sizeof(buf));
-
-            // Pack exceptions: [from0,to0,on0, from1,to1,on1, ...] (uint32,uint32,uint8).
-            uint8_t ebuf[MAX_EXCEPTIONS * 9] = {0};
-            for (int i = 0; i < excCount && i < MAX_EXCEPTIONS; i++)
-            {
-                uint32_t *p = (uint32_t *)&ebuf[i * 9];
-                p[0] = exceptions[i].fromDay;
-                p[1] = exceptions[i].toDay;
-                ebuf[i * 9 + 8] = exceptions[i].on ? 1 : 0;
-            }
-            prefs.putBytes(nvsKeyExc, ebuf, sizeof(ebuf));
-            prefs.putInt(nvsKeyExcCount, excCount);
-
-            prefs.end();
-            Serial.printf("[SCHED] Saved NVS: mode=%s ovr=%s days=%d wins=%d exc=%d\n",
-                          modeToString(mode), overrideToString(override), daysMask, winCount, excCount);
+            buf[i * 2]     = windows[i].startMin;
+            buf[i * 2 + 1] = windows[i].endMin;
         }
-        else
+        nvs::putBytes(nvsNamespace, nvsKeyWins, buf, sizeof(buf));
+
+        // Pack exceptions: [from0,to0,on0, from1,to1,on1, ...] (uint32,uint32,uint8).
+        uint8_t ebuf[MAX_EXCEPTIONS * 9] = {0};
+        for (int i = 0; i < excCount && i < MAX_EXCEPTIONS; i++)
         {
-            Serial.println("[SCHED] Failed to open NVS (write).");
+            uint32_t *p = (uint32_t *)&ebuf[i * 9];
+            p[0] = exceptions[i].fromDay;
+            p[1] = exceptions[i].toDay;
+            ebuf[i * 9 + 8] = exceptions[i].on ? 1 : 0;
         }
+        nvs::putBytes(nvsNamespace, nvsKeyExc, ebuf, sizeof(ebuf));
+        nvs::putInt(nvsNamespace, nvsKeyExcCount, excCount);
+
+        Serial.printf("[SCHED] Saved NVS: mode=%s ovr=%s days=%d wins=%d exc=%d\n",
+                      modeToString(mode), overrideToString(override), daysMask, winCount, excCount);
     }
 
     void loadFromNVS()
     {
-        if (prefs.begin(nvsNamespace, true))
+        mode     = (Mode)nvs::getInt(nvsNamespace, nvsKeyMode, (int)Mode::AUTO);
+        override = (Override)nvs::getInt(nvsNamespace, nvsKeyOverride, (int)Override::NONE);
+        daysMask = (uint8_t)nvs::getInt(nvsNamespace, nvsKeyDays, 0b1111100);
+        winCount = nvs::getInt(nvsNamespace, nvsKeyWinCount, 0);
+        int buf[16] = {0};
+        nvs::getBytes(nvsNamespace, nvsKeyWins, buf, sizeof(buf));
+        for (int i = 0; i < winCount && i < 8; i++)
         {
-            if (prefs.isKey(nvsKeyMode))
-            {
-                mode     = (Mode)prefs.getInt(nvsKeyMode, (int)Mode::AUTO);
-                override = (Override)prefs.getInt(nvsKeyOverride, (int)Override::NONE);
-                daysMask = (uint8_t)prefs.getInt(nvsKeyDays, 0b1111100);
-                winCount = prefs.getInt(nvsKeyWinCount, 0);
-                int buf[16] = {0};
-                prefs.getBytes(nvsKeyWins, buf, sizeof(buf));
-                for (int i = 0; i < winCount && i < 8; i++)
-                {
-                    windows[i].startMin = buf[i * 2];
-                    windows[i].endMin   = buf[i * 2 + 1];
-                }
-
-                excCount = prefs.getInt(nvsKeyExcCount, 0);
-                if (excCount > MAX_EXCEPTIONS) excCount = MAX_EXCEPTIONS;
-                uint8_t ebuf[MAX_EXCEPTIONS * 9] = {0};
-                prefs.getBytes(nvsKeyExc, ebuf, sizeof(ebuf));
-                for (int i = 0; i < excCount; i++)
-                {
-                    uint32_t *p = (uint32_t *)&ebuf[i * 9];
-                    exceptions[i].fromDay = p[0];
-                    exceptions[i].toDay   = p[1];
-                    exceptions[i].on      = ebuf[i * 9 + 8] != 0;
-                }
-
-                prefs.end();
-                Serial.printf("[SCHED] Loaded NVS: mode=%s ovr=%s days=%d wins=%d exc=%d\n",
-                              modeToString(mode), overrideToString(override), daysMask, winCount, excCount);
-            }
-            else
-            {
-                Serial.println("[SCHED] No NVS schedule found, keeping compiled defaults.");
-                prefs.end();
-            }
+            windows[i].startMin = buf[i * 2];
+            windows[i].endMin   = buf[i * 2 + 1];
         }
-        else
+
+        excCount = nvs::getInt(nvsNamespace, nvsKeyExcCount, 0);
+        if (excCount > MAX_EXCEPTIONS) excCount = MAX_EXCEPTIONS;
+        uint8_t ebuf[MAX_EXCEPTIONS * 9] = {0};
+        nvs::getBytes(nvsNamespace, nvsKeyExc, ebuf, sizeof(ebuf));
+        for (int i = 0; i < excCount; i++)
         {
-            Serial.println("[SCHED] Failed to open NVS (read).");
+            uint32_t *p = (uint32_t *)&ebuf[i * 9];
+            exceptions[i].fromDay = p[0];
+            exceptions[i].toDay   = p[1];
+            exceptions[i].on      = ebuf[i * 9 + 8] != 0;
         }
+
+        Serial.printf("[SCHED] Loaded NVS: mode=%s ovr=%s days=%d wins=%d exc=%d\n",
+                      modeToString(mode), overrideToString(override), daysMask, winCount, excCount);
     }
 
     // ---------- date / exception helpers ----------
@@ -483,63 +457,79 @@ namespace sched
         Serial.println("[SCHED] Evicted oldest exception (round-robin).");
     }
 
-    /// @brief Called every loop(). Fires the next transition if it's due, and
-    /// consumes the handshake flags set by other modules (NTP re-sync, MQTT
-    /// override, MQTT exception, midnight day rollover). Keeps sched:: free of
-    /// cross-header coupling.
-    void tick()
+    /// @brief Event-bus handler. Replaces the old volatile handshake globals
+    /// (schedNeedsRearm / pendingRelayCmd / pendingException*) that were
+    /// polled in tick(). Subscribed in initSchedule().
+    void onEvent(Evt evt, void *ctx)
     {
-        // NTP (re)synced — recompute state + timeline.
-        if (schedNeedsRearm)
+        switch (evt)
         {
-            schedNeedsRearm = false;
+        case Evt::NtpSynced:
+            // Local time (re)synced — recompute state + re-arm timeline.
             rearm();
-        }
-        // First valid time after boot: the initial rearm() was skipped (no time
-        // yet), so arm the timeline as soon as NTP becomes valid.
-        else if (nextTransitionTime == 0 && timeValid())
-        {
-            rearm();
-        }
+            break;
 
-        // MQTT override request.
-        if (pendingRelayCmd != 0)
+        case Evt::RelayOverride:
         {
-            int cmd = pendingRelayCmd;
-            pendingRelayCmd = 0;
-            if (cmd == 1)      override = Override::ON;
-            else if (cmd == 2) override = Override::OFF;
-            else if (cmd == 3) override = Override::NONE;
+            bool on = ctx ? *static_cast<bool *>(ctx) : true;
+            override = on ? Override::ON : Override::OFF;
             Serial.printf("[SCHED] Override applied -> %s\n", overrideToString(override));
             rearm();
             saveToNVS();
+            break;
         }
 
-        // MQTT exception injection / clear.
-        if (pendingException)
+        case Evt::RelayAuto:
+            override = Override::NONE;
+            Serial.printf("[SCHED] Override applied -> %s\n", overrideToString(override));
+            rearm();
+            saveToNVS();
+            break;
+
+        case Evt::ExceptionSet:
         {
-            pendingException = false;
-            if (pendingExceptionClear)
-            {
-                pendingExceptionClear = false;
-                excCount = 0;
-                Serial.println("[SCHED] All exceptions cleared (MQTT).");
-            }
-            else if (pendingExcFrom != 0 && pendingExcTo != 0)
+            ExceptionReq *r = static_cast<ExceptionReq *>(ctx);
+            if (r && r->fromDay != 0 && r->toDay != 0)
             {
                 // Free expired slots first, then round-robin if still full.
                 pruneExpiredExceptions();
                 if (excCount >= MAX_EXCEPTIONS)
                     evictOldestException();
-                exceptions[excCount].fromDay = pendingExcFrom;
-                exceptions[excCount].toDay   = pendingExcTo;
-                exceptions[excCount].on      = pendingExcOn;
+                exceptions[excCount].fromDay = r->fromDay;
+                exceptions[excCount].toDay   = r->toDay;
+                exceptions[excCount].on      = r->on;
                 excCount++;
-                Serial.printf("[SCHED] Exception added (MQTT): %s\n",
-                              pendingExcOn ? "ON" : "OFF");
+                Serial.printf("[SCHED] Exception added (event): %s\n",
+                              r->on ? "ON" : "OFF");
             }
             rearm();
             saveToNVS();
+            break;
+        }
+
+        case Evt::ExceptionClear:
+            excCount = 0;
+            Serial.println("[SCHED] All exceptions cleared (event).");
+            rearm();
+            saveToNVS();
+            break;
+
+        case Evt::BrokerChanged:
+            // Not relevant to the scheduler; ignore.
+            break;
+        }
+    }
+
+    /// @brief Called every loop(). Fires the next transition if it's due and
+    /// handles the local midnight rollover. All cross-module triggers (NTP
+    /// re-sync, MQTT override/exception) now arrive via the event bus.
+    void tick()
+    {
+        // First valid time after boot: the initial rearm() was skipped (no time
+        // yet), so arm the timeline as soon as NTP becomes valid.
+        if (nextTransitionTime == 0 && timeValid())
+        {
+            rearm();
         }
 
         // Local midnight rollover — prune expired exceptions, re-evaluate.
@@ -663,62 +653,23 @@ namespace sched
     {
         loadFromNVS();
 
-        if (WiFi.status() != WL_CONNECTED)
-        {
-            Serial.println("[SCHED] WiFi not connected — using NVS/default values.");
-            rearm();
-            return;
-        }
-
-        WiFiClientSecure client;
-        client.setInsecure();
-        HTTPClient https;
-        https.setConnectTimeout(5000);
-        https.setTimeout(5000);
-        if (!https.begin(client, scheduleURL))
-        {
-            Serial.println("[SCHED] HTTPS begin failed — using NVS/default values.");
-            rearm();
-            return;
-        }
-
-        int httpCode = https.GET();
-        if (httpCode != HTTP_CODE_OK)
-        {
-            Serial.printf("[SCHED] HTTP GET failed (code %d) — using NVS/default values.\n", httpCode);
-            https.end();
-            rearm();
-            return;
-        }
-
-        String payload = https.getString();
-        https.end();
-
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, payload);
-        if (err)
+        // Schedule JSON uses a "Schedules" array (no "Default" fallback).
+        // The helper walks that array and returns the entry matching our MAC.
+        http::FetchResult res = http::fetchJsonByMac(scheduleURL, WiFi.macAddress().c_str(),
+                                                     doc, "Schedules", nullptr);
+        if (res.matched && !res.entry.isNull())
         {
-            Serial.printf("[SCHED] JSON parse error: %s — using NVS/default values.\n", err.c_str());
-            rearm();
-            return;
+            applyEntry(res.entry);
         }
-
-        const char *myMac = WiFi.macAddress().c_str();
-        bool matched = false;
-        JsonArray schedules = doc["Schedules"];
-        for (JsonObject entry : schedules)
+        else if (res.ok)
         {
-            const char *device = entry["Device"] | "";
-            if (strcmp(device, myMac) == 0)
-            {
-                applyEntry(entry);
-                matched = true;
-                break;
-            }
-        }
-
-        if (!matched)
             Serial.println("[SCHED] No entry for this MAC — using NVS/default values.");
+        }
+        else
+        {
+            Serial.println("[SCHED] Fetch failed — using NVS/default values.");
+        }
 
         saveToNVS();
         rearm();
@@ -727,6 +678,7 @@ namespace sched
     void initSchedule()
     {
         Serial.println("--- Initializing schedule (event-driven)");
+        events::subscribe(onEvent); // react to NTP / MQTT events via the bus
         fetchSchedule();
         Serial.printf("[SCHED] Active: mode=%s ovr=%s days=%d wins=%d exc=%d\n",
                       modeToString(mode), overrideToString(override), daysMask, winCount, excCount);

@@ -6,6 +6,7 @@
 #include "time.h"
 #include "esp_sntp.h"
 #include "ledHelper.h"
+#include "core/events.h"
 
 namespace ntp{
 
@@ -64,10 +65,10 @@ namespace ntp{
     {
         Serial.println("Got time adjustment from NTP!");
         printLocalTime();
-        // Signal the scheduler to re-evaluate its timeline now that local time
-        // is (re)synced — catches DST changes and the initial sync. Consumed
-        // in sched::tick() to avoid a cross-header include cycle.
-        schedNeedsRearm = true;
+        // Notify subscribers (e.g. the scheduler) that local time is (re)synced,
+        // so they can re-evaluate their timeline — catches DST changes and the
+        // initial sync. Replaces the old `schedNeedsRearm` global handshake.
+        events::emit(Evt::NtpSynced);
     }
 
     void printLocalTime()

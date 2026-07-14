@@ -11,6 +11,7 @@
 #include "mainHelper.h"
 #include "scheduleHelper.h"
 #include "configHelper.h"   // dynamic MQTT broker (cfg::)
+#include "core/events.h"
 
 #include "ESP32OTAPull.h"
 
@@ -20,8 +21,20 @@ OneButton button(GPIO_NUM_0);
 
 
 void handleMultiClick();
-void configModeCallback(WiFiManager *wm);
 void startWifiPortal();
+
+// Event-bus handler: when the dynamic broker endpoint changes, force an MQTT
+// disconnect so the next reconnect attempt binds to the new host/port. This
+// replaces the old `mqttNeedsReconnect` global handshake polled in loop().
+void brokerChangedHandler(Evt evt, void *ctx)
+{
+  if (evt == Evt::BrokerChanged)
+  {
+    Serial.printf("[CFG] Broker swap -> disconnecting from %s:%d\n",
+                  cfg::brokerHost, cfg::brokerPort);
+    mqtt::client.disconnect();
+  }
+}
 
 void setup()
 {
@@ -83,6 +96,10 @@ void setup()
   ota::checkUpdate();
 
   
+
+  // Subscribe to the event bus (broker-swap handler) before resolving the
+  // dynamic broker config so any BrokerChanged event is handled.
+  events::subscribe(brokerChangedHandler);
 
   // Resolve the (dynamic) MQTT broker host/port from remote config + NVS
   // BEFORE connecting, so initMQTT() binds to the correct endpoint.
@@ -159,16 +176,6 @@ void loop()
       previousTimer_mqtt = currentTime;
       mqtt::mqttTryReconnect();
     }
-  }
-  // Dynamic broker swap: cfg::fetchConfig() raised this flag when the resolved
-  // broker host/port changed. Force a disconnect so the next reconnect attempt
-  // (above) binds to the new endpoint.
-  else if (mqttNeedsReconnect)
-  {
-    mqttNeedsReconnect = false;
-    Serial.printf("[CFG] Broker swap -> disconnecting from %s:%d\n",
-                  cfg::brokerHost, cfg::brokerPort);
-    mqtt::client.disconnect();
   }
   mqtt::client.loop();
   //-----------------
