@@ -10,6 +10,7 @@
 #include "OneButton.h"
 #include "mainHelper.h"
 #include "scheduleHelper.h"
+#include "configHelper.h"   // dynamic MQTT broker (cfg::)
 
 #include "ESP32OTAPull.h"
 
@@ -82,7 +83,11 @@ void setup()
   ota::checkUpdate();
 
   
-  
+
+  // Resolve the (dynamic) MQTT broker host/port from remote config + NVS
+  // BEFORE connecting, so initMQTT() binds to the correct endpoint.
+  cfg::initConfig();
+
   // Initialize connection to MQTT Broker.
   if (mqtt::initMQTT())
   {
@@ -154,6 +159,16 @@ void loop()
       previousTimer_mqtt = currentTime;
       mqtt::mqttTryReconnect();
     }
+  }
+  // Dynamic broker swap: cfg::fetchConfig() raised this flag when the resolved
+  // broker host/port changed. Force a disconnect so the next reconnect attempt
+  // (above) binds to the new endpoint.
+  else if (mqttNeedsReconnect)
+  {
+    mqttNeedsReconnect = false;
+    Serial.printf("[CFG] Broker swap -> disconnecting from %s:%d\n",
+                  cfg::brokerHost, cfg::brokerPort);
+    mqtt::client.disconnect();
   }
   mqtt::client.loop();
   //-----------------

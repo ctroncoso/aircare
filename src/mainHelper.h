@@ -120,6 +120,7 @@ void updateTick()
     previousTimer_2 = currentTime;
     ota::checkUpdate();
     sched::fetchSchedule(); // re-fetch schedule (falls back to NVS on failure)
+    cfg::fetchConfig();     // re-fetch broker config (raises mqttNeedsReconnect on change)
   }
 }
 

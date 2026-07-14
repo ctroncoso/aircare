@@ -66,6 +66,11 @@ volatile uint32_t pendingExcFrom = 0;
 volatile uint32_t pendingExcTo = 0;
 volatile bool pendingExcOn = false;
 
+// Dynamic MQTT broker handshake flag: set by cfg::fetchConfig() when the
+// resolved broker host/port changes from what is currently in use, so the main
+// loop disconnects and rebinds the client to the new endpoint.
+volatile bool mqttNeedsReconnect = false;
+
 enum pub_event
 {
     ERROR = -1,

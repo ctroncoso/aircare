@@ -2,12 +2,11 @@
 
 #include "globals.h"
 #include "scheduleHelper.h"  // for sched::parseDate() used in the EXCEPTION command
+#include "configHelper.h"    // for cfg::brokerHost / cfg::brokerPort (dynamic broker)
 #include <PubSubClient.h>
 
 namespace mqtt
 {
-  const char *mqtt_server = "52.23.110.164";
-
   PubSubClient client(espClient); // mqtt
 
   bool initMQTT();
@@ -22,7 +21,7 @@ namespace mqtt
     client.setCallback(callback);
     client.setBufferSize(256);  // TODO - mover reinicio de mcu a mqttreconnect 
     client.setKeepAlive(15);
-    client.setServer(mqtt_server, 1883);
+    client.setServer(cfg::brokerHost, cfg::brokerPort);
     if (!client.connected())
     {
       mqttreconnect();
@@ -40,6 +39,8 @@ namespace mqtt
       // ID de cliente con string random
       String clientId = "aircare-";
       clientId += WiFi.macAddress();
+      // (Re)bind to the dynamically resolved broker before each connect attempt.
+      client.setServer(cfg::brokerHost, cfg::brokerPort);
       // probar conexión
       if (client.connect(clientId.c_str()))
       {
@@ -67,6 +68,8 @@ namespace mqtt
   bool mqttTryReconnect()
   {
     String clientId = "aircare-" + WiFi.macAddress();
+    // (Re)bind to the dynamically resolved broker before each connect attempt.
+    client.setServer(cfg::brokerHost, cfg::brokerPort);
     if (client.connect(clientId.c_str()))
     {
       Serial.println("MQTT: reconnected.");
