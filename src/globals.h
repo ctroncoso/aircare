@@ -1,32 +1,24 @@
+// globals.h — minimal shared state that is genuinely cross-cutting.
+//
+// After the restructure, almost everything moved into its own module
+// (core/, sensors/, net/, config/, actuators/, app/). What remains here is
+// the small amount of state that is shared across subsystems and has no
+// natural single owner:
+//   - co2_State      : set by app (measurement), read by leds (restore)
+//   - espClient      : owned by net/mqtt (PubSubClient binds to it)
+//   - wm             : owned by net/wifi (portal + main.cpp restart path)
+//   - previousTimer_mqtt : MQTT reconnect gate, used only in main.cpp loop
 #pragma once
 
-#include <ArduinoJson.h>
+#include <Arduino.h>
+#include <WiFi.h>
 #include <WiFiManager.h>
-
-// board.h owns pins, build constants, CO2_Condition, and pub_event.
-#include "core/board.h"
-// events.h is the event bus that replaces the volatile handshake globals below.
+#include "core/board.h"   // CO2_Condition, PROGRAM_VERSION, ONE_MIN, PORTAL_*
 #include "core/events.h"
 
-// Filter schedule (event-driven) — see config/schedule.h.
-// The relay's desired state is owned by the sched:: engine and applied via the
-// actuators/relay module; telemetry reads relay::state(). The previous
-// FILTER_ON_HHMM / FILTER_OFF_HHMM / LUNCH_START_HHMM / LUNCH_END_HHMM globals
-// were replaced by a per-device Mode (auto/on/off) + weekly window list + MQTT
-// override. rl1State/rl2State now live in actuators/relay.cpp.
+inline CO2_Condition co2_State = CO2_Condition::Unknown;
 
-JsonDocument doc;
-char serializedString[300];
+inline WiFiClient espClient;
+inline WiFiManager wm;
 
-CO2_Condition co2_State = CO2_Condition::Unknown;
-
-WiFiClient espClient;
-WiFiManager wm;
-
-unsigned long previousTimer_1 = 0;
-unsigned long previousTimer_2 = 0;
-unsigned long previousTimer_mqtt = 0;   // gate for periodic MQTT reconnect attempts
-
-// Cross-module triggers (NTP re-sync, MQTT override/exception, broker swap)
-// now flow through the event bus in core/events.h instead of the old
-// volatile handshake flags, which have been removed.
+inline unsigned long previousTimer_mqtt = 0; // gate for periodic MQTT reconnect attempts

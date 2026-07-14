@@ -75,13 +75,16 @@ namespace mqtt
 
     void publishEvent(pub_event event, String param)
     {
+        // Local buffer: events no longer share the telemetry buffer
+        // (app.cpp's serializedString), removing cross-module coupling.
+        static char eventBuf[300];
         JsonDocument doc;
         doc["event"] = event;
         doc["param"] = param;
         doc["mac"] = WiFi.macAddress();
         doc["fw"] = PROGRAM_VERSION;
-        serializeJson(doc, serializedString);
-        mqtt::mqttPublish("cleanair/events", serializedString);
+        serializeJson(doc, eventBuf);
+        mqtt::mqttPublish("cleanair/events", eventBuf);
     }
 
     void callback(char *topic, byte *payload, unsigned int length)

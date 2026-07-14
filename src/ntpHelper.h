@@ -18,7 +18,6 @@ namespace ntp
     struct tm getTM();
     void printLocalTime();
     void timeavailable(struct timeval *t);
-    void setupNTP();
     bool timeSynced();
     void initNTP();
 }

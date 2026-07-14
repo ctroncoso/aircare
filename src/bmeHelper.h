@@ -9,10 +9,10 @@
 namespace bme
 {
     inline Adafruit_BME280 bme; // I2C (inline so multiple TUs are safe)
-    float temp;
-    float pressure;
-    float altitude;
-    float humidity;
+    inline float temp = 0;
+    inline float pressure = 0;
+    inline float altitude = 0;
+    inline float humidity = 0;
 
     bool initBME();
 }

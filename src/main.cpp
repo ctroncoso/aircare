@@ -8,7 +8,7 @@
 #include "bmeHelper.h"
 #include "otaHelper.h"
 #include "OneButton.h"
-#include "mainHelper.h"
+#include "app/app.h"
 #include "config/schedule.h"
 #include "configHelper.h"   // dynamic MQTT broker (cfg::)
 #include "actuators/relay.h"
@@ -16,8 +16,6 @@
 
 #include "ESP32OTAPull.h"
 
-// threat condition
-int alarm_level = 0;
 OneButton button(GPIO_NUM_0);
 
 
