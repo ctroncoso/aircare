@@ -41,6 +41,13 @@
       "FilterOff": 1830,
       "LunchStart": 1230,
       "LunchEnd": 1430
+    },
+    {
+      "Device": "C8:F0:9E:9E:38:40",
+      "FilterOn": 830,
+      "FilterOff": 1830,
+      "LunchStart": 1230,
+      "LunchEnd": 1430
     }
   ]
 }

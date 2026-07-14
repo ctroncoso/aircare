@@ -103,18 +103,20 @@ namespace sched
         }
 
         // 3. Fetch the schedule manifest over HTTPS.
-        WiFiClientSecure *client = new WiFiClientSecure;
-        client->setInsecure(); // no CA bundle verification (matches OTA helper behaviour)
+        // NB: use a STACK-allocated client (not new/delete). HTTPClient keeps a
+        // reference to it; if we delete it while `https` is still in scope its
+        // destructor dereferences a freed object (vtable=0) and panics.
+        WiFiClientSecure client;
+        client.setInsecure(); // no CA bundle verification (matches OTA helper behaviour)
 
         HTTPClient https;
         https.setConnectTimeout(5000);
         https.setTimeout(5000);
 
         Serial.printf("[SCHED] Fetching %s\n", scheduleURL);
-        if (!https.begin(*client, scheduleURL))
+        if (!https.begin(client, scheduleURL))
         {
             Serial.println("[SCHED] HTTPS begin failed — using NVS/default values.");
-            delete client;
             return;
         }
 
@@ -123,13 +125,13 @@ namespace sched
         {
             Serial.printf("[SCHED] HTTP GET failed (code %d) — using NVS/default values.\n", httpCode);
             https.end();
-            delete client;
             return;
         }
 
         String payload = https.getString();
         https.end();
-        delete client;
+        // `client` is destroyed automatically when fetchSchedule() returns,
+        // after `https` (declared later) has already been destroyed.
 
         // 4. Parse JSON and look for our MAC.
         JsonDocument doc;
