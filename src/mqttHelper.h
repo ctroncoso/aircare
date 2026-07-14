@@ -32,7 +32,7 @@ namespace mqtt
   bool mqttreconnect()
   {
     // Loop hasta lograr conexión. Luego de 12 intentos cada 5 segundos, reiniciar MCU
-    u_int8_t attempts = 12;
+    u_int8_t attempts = 4;
     while (!client.connected())
     {
       Serial.print("Attempting MQTT connection...");
