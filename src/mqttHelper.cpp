@@ -1,5 +1,6 @@
 // mqttHelper.cpp — MQTT broker connect/publish/subscribe implementation.
 #include "mqttHelper.h"
+#include "secrets.h"  // MQTT_USER / MQTT_PASS (gitignored, private)
 
 namespace mqtt
 {
@@ -27,7 +28,7 @@ namespace mqtt
             String clientId = "aircare-";
             clientId += WiFi.macAddress();
             client.setServer(cfg::brokerHost, cfg::brokerPort);
-            if (client.connect(clientId.c_str()))
+            if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
             {
                 Serial.println("connected");
             }
@@ -50,7 +51,7 @@ namespace mqtt
     {
         String clientId = "aircare-" + WiFi.macAddress();
         client.setServer(cfg::brokerHost, cfg::brokerPort);
-        if (client.connect(clientId.c_str()))
+        if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
         {
             Serial.println("MQTT: reconnected.");
             client.subscribe("AirCare/inCommands/broadcast");

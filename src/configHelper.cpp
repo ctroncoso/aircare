@@ -4,8 +4,8 @@
 namespace cfg
 {
     const char *configURL = "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/config.json";
-    const char *FALLBACK_BROKER = "52.23.110.164";
-    const int   FALLBACK_PORT   = 1883;
+    const char *FALLBACK_BROKER = "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud";
+    const int   FALLBACK_PORT   = 8883;
 
     const char *nvsNamespace = "aircare";
     const char *nvsKeyBroker = "cfg_brk";

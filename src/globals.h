@@ -12,13 +12,14 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WiFiManager.h>
 #include "core/board.h"   // CO2_Condition, PROGRAM_VERSION, ONE_MIN, PORTAL_*
 #include "core/events.h"
 
 inline CO2_Condition co2_State = CO2_Condition::Unknown;
 
-inline WiFiClient espClient;
+inline WiFiClientSecure espClient;
 inline WiFiManager wm;
 
 inline unsigned long previousTimer_mqtt = 0; // gate for periodic MQTT reconnect attempts
