@@ -66,6 +66,8 @@ namespace cfg
         beforeHost[sizeof(beforeHost) - 1] = '\0';
         int beforePort = brokerPort;
 
+        bool changed = false;
+
         JsonDocument doc;
         http::FetchResult res = http::fetchJsonByMac(configURL, WiFi.macAddress().c_str(), doc);
         if (!res.ok)
@@ -74,14 +76,17 @@ namespace cfg
         }
         else if (!res.entry.isNull())
         {
-            applyEntry(res.entry);
+            changed = applyEntry(res.entry);
         }
         else
         {
             Serial.println("[CFG] No Default or matching entry — keeping NVS/fallback values.");
         }
 
-        saveToNVS();
+        if (changed)
+        {
+            saveToNVS();
+        }
 
         if (strcmp(brokerHost, beforeHost) != 0 || brokerPort != beforePort)
         {
