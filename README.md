@@ -314,3 +314,60 @@ Key parameters that can be adjusted in `globals.h`:
 | `PORTAL_TIMEOUT`     | 180 s       | Timeout for the configuration portal    |
 
 The MQTT broker address is currently hard‑coded to `52.23.110.164` in `mqttHelper.h`.
+
+---
+
+## TODO / Proposed Improvements
+
+Brainstorm of improvements gathered from a code review (2026‑07‑15). Grouped by
+impact. Items in **Section A** have been implemented; B–D are pending.
+
+### A. Correctness bugs (DONE)
+
+1. **`co2_fu` reads the wrong register** — `src/app/app.cpp`. The variable means
+   *filtered‑uncompensated* but was reading `CO2_UNFILTERED_UNCOMPENSATED`. Now
+   reads `CO2_FILTERED_UNCOMPENSATED` (matching `co2_fc`/`uc`/`uu`).
+2. **No CO₂ validity / error check** — `getCO2_State()` and `printValues()`
+   trusted `co2_fc` unconditionally. Added `co2Valid()` (rejects `0` and
+   `>=10000`) plus a `readErrorStatus()` check; an invalid sample skips the
+   publish + LED update so a stale/zero reading never shows as "Green".
+3. **`rl2` telemetry duplicated `rl1`** — both reported `relay::state()`. The
+   two relays are now genuinely independent (`relay::state(1)` / `relay::state(2)`)
+   with per‑relay and combined helpers; telemetry publishes real `rl1`/`rl2`.
+
+### B. Robustness / reliability
+
+4. **`serializedString[300]` can silently truncate** — `app.cpp`. **FIXED:**
+   buffer is now `512+1` and `serializeJson` is bounded to the buffer size with a
+   truncation warning; the MQTT queue slot (`Q_SLOT`) and `Q_CHUNK` were bumped to
+   match (3 samples/blob = 1539 B < 1984 B NVS cap).
+5. **`mqttPublish` persists to NVS on every dropped sample** — `mqttHelper.cpp`.
+   Each minute the link is down, `persistQueue()` rewrites NVS chunks; NVS has
+   finite write endurance (~10⁵). Persist every N samples or only on reconnect.
+6. **Hardcoded manifest URLs** — `schedule.cpp` / `otaHelper.cpp` used raw
+   `raw.githubusercontent.com/.../main/...` strings. **FIXED:** centralised into
+   `core/board.h` (`REMOTE_BASE_URL`, `scheduleURL`, `updateURL`); the scheduler
+   aliases `sched::scheduleURL` and OTA uses `updateURL`.
+7. **4 CO₂ I²C reads per cycle, only 1 used for logic** — `app.cpp`. Only `co2_fc`
+   drives decisions; the other three are telemetry‑only. Consider lazy‑reading
+   extras. `delay(100)` sits between BME and CO₂ reads with no I²C contention guard.
+
+### C. Structure / maintainability
+
+8. **Event bus is synchronous, no dedup/unsubscribe** — `core/events.cpp`. A
+   handler that re‑entrantly calls `emit` could recurse. A queued dispatch model
+   would be safer (optional).
+9. **`state2string()` re‑derives state** instead of using the stored `co2_State`
+   (`app.cpp`). Minor inconsistency.
+10. **`test/` is empty** — no automated tests. The scheduler logic
+    (`desiredState`, `computeNextTransition`, `exceptionActive`, `evaluateWindows`)
+    is pure and unit‑testable with PlatformIO `test`; a test would have caught A1.
+
+### D. Features / nice‑to‑haves
+
+11. **Periodic HEALTH telemetry** — free heap, RSSI trend, NTP sync age, sensor
+    error status, for fleet monitoring.
+12. **Remote‑configurable CO₂ thresholds** — `CO2_LOW`/`CO2_HIGH` are compile‑time;
+    expose via MQTT/NVS like the schedule.
+13. **`GET_CONFIG` command** — dump current schedule/override/exceptions back over
+    MQTT for remote verification.

@@ -16,7 +16,7 @@
 
 // Shared telemetry buffer (defined in app.cpp).
 extern JsonDocument doc;
-extern char serializedString[300];
+extern char serializedString[512 + 1];
 
 void readValues();
 void printValues();

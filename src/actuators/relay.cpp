@@ -3,29 +3,63 @@
 
 namespace relay
 {
-    bool g_state = false; // false = relay OFF (both channels high)
+    // Per-channel logical state (true = ON). Index 0 unused; [1]=fan, [2]=uv.
+    bool g_state[3] = {false, false, false};
 
-    bool state()
+    // Map a channel id/number to its GPIO pin.
+    static int pinFor(int which)
     {
-        return g_state;
+        return (which == 2) ? rlPin2 : rlPin1; // default to relay 1
     }
 
-    void set(bool on)
+    bool state(Id which)
     {
-        if (on && !g_state)
+        return g_state[(int)which];
+    }
+
+    bool state(int which)
+    {
+        if (which < 1 || which > 2) which = 1;
+        return g_state[which];
+    }
+
+    void set(Id which, bool on)
+    {
+        int idx = (int)which;
+        if (idx < 1 || idx > 2) return;
+        if (on && !g_state[idx])
         {
-            digitalWrite(rlPin1, LOW);
-            digitalWrite(rlPin2, LOW);
-            g_state = true;
-            Serial.println("[RELAY] -> ON");
+            digitalWrite(pinFor(idx), LOW); // active-low relay module
+            g_state[idx] = true;
+            Serial.printf("[RELAY %d] -> ON\n", idx);
         }
-        else if (!on && g_state)
+        else if (!on && g_state[idx])
         {
-            digitalWrite(rlPin1, HIGH);
-            digitalWrite(rlPin2, HIGH);
-            g_state = false;
-            Serial.println("[RELAY] -> OFF");
+            digitalWrite(pinFor(idx), HIGH);
+            g_state[idx] = false;
+            Serial.printf("[RELAY %d] -> OFF\n", idx);
         }
+    }
+
+    void set(int which, bool on)
+    {
+        set((Id)which, on);
+    }
+
+    void setBoth(bool on)
+    {
+        set(Id::Fan, on);
+        set(Id::Uv, on);
+    }
+
+    bool bothOn()
+    {
+        return g_state[1] && g_state[2];
+    }
+
+    bool anyOn()
+    {
+        return g_state[1] || g_state[2];
     }
 
     void init()
@@ -40,6 +74,7 @@ namespace relay
         // relay is genuinely de-energized out of reset.
         digitalWrite(rlPin1, HIGH);
         digitalWrite(rlPin2, HIGH);
-        g_state = false;
+        g_state[1] = false;
+        g_state[2] = false;
     }
 }

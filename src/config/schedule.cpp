@@ -4,38 +4,43 @@
 namespace sched
 {
     // ---------- constants ----------
-    const char *scheduleURL = "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/schedule.json";
+    // scheduleURL is provided by core/board.h (REMOTE_BASE_URL "/schedule.json").
+    // Alias it into this namespace so the rest of the scheduler code (which
+    // references sched::scheduleURL) keeps working unchanged.
+    const char *scheduleURL = ::scheduleURL;
 
     // ---------- NVS keys ----------
     const char *nvsNamespace = "aircare";
-    const char *nvsKeyMode      = "sched_mode";
-    const char *nvsKeyOverride  = "sched_ovr";
-    const char *nvsKeyDays      = "sched_days";
-    const char *nvsKeyWinCount  = "sched_winc";
-    const char *nvsKeyWins      = "sched_wins";
-    const char *nvsKeyExcCount  = "sched_excc";
-    const char *nvsKeyExc       = "sched_exc";
+    const char *nvsKeyMode = "sched_mode";
+    const char *nvsKeyOverride = "sched_ovr";
+    const char *nvsKeyDays = "sched_days";
+    const char *nvsKeyWinCount = "sched_winc";
+    const char *nvsKeyWins = "sched_wins";
+    const char *nvsKeyExcCount = "sched_excc";
+    const char *nvsKeyExc = "sched_exc";
 
     // ---------- config / runtime state ----------
-    Mode      mode      = Mode::AUTO;
-    Override  override  = Override::NONE;
-    uint8_t   daysMask  = 0b1111100; // Mon..Sun (bit0=Mon). default Mon-Fri
-    Window    windows[8] = {0};
-    int       winCount  = 0;
+    Mode mode = Mode::AUTO;
+    Override override = Override::NONE;
+    uint8_t daysMask = 0b1111100; // Mon..Sun (bit0=Mon). default Mon-Fri
+    Window windows[8] = {0};
+    int winCount = 0;
 
-    time_t    nextTransitionTime = 0;
-    bool      nextTransitionState = false;
+    time_t nextTransitionTime = 0;
+    bool nextTransitionState = false;
 
     Exception exceptions[MAX_EXCEPTIONS] = {0};
-    int       excCount = 0;
+    int excCount = 0;
 
-    uint32_t  lastEvalDay = 0;
+    uint32_t lastEvalDay = 0;
 
     // ---------- string helpers ----------
     Mode modeFromString(const char *s)
     {
-        if (s && strcmp(s, "on") == 0)  return Mode::ON;
-        if (s && strcmp(s, "off") == 0) return Mode::OFF;
+        if (s && strcmp(s, "on") == 0)
+            return Mode::ON;
+        if (s && strcmp(s, "off") == 0)
+            return Mode::OFF;
         return Mode::AUTO;
     }
 
@@ -43,9 +48,12 @@ namespace sched
     {
         switch (m)
         {
-        case Mode::ON:  return "on";
-        case Mode::OFF: return "off";
-        default:        return "auto";
+        case Mode::ON:
+            return "on";
+        case Mode::OFF:
+            return "off";
+        default:
+            return "auto";
         }
     }
 
@@ -53,9 +61,12 @@ namespace sched
     {
         switch (o)
         {
-        case Override::ON:  return "on";
-        case Override::OFF: return "off";
-        default:            return "none";
+        case Override::ON:
+            return "on";
+        case Override::OFF:
+            return "off";
+        default:
+            return "none";
         }
     }
 
@@ -67,10 +78,12 @@ namespace sched
 
     bool parseHHMM(const char *s, int &outMin)
     {
-        if (!s || strlen(s) < 5) return false;
+        if (!s || strlen(s) < 5)
+            return false;
         int h = (s[0] - '0') * 10 + (s[1] - '0');
         int m = (s[3] - '0') * 10 + (s[4] - '0');
-        if (h < 0 || h > 23 || m < 0 || m > 59) return false;
+        if (h < 0 || h > 23 || m < 0 || m > 59)
+            return false;
         outMin = h * 60 + m;
         return true;
     }
@@ -80,18 +93,18 @@ namespace sched
         time_t now = ntp::getTime();
         struct tm dt;
         localtime_r(&now, &dt);
-        return (uint32_t)(dt.tm_year + 1900) * 10000
-             + (uint32_t)(dt.tm_mon + 1) * 100
-             + (uint32_t)dt.tm_mday;
+        return (uint32_t)(dt.tm_year + 1900) * 10000 + (uint32_t)(dt.tm_mon + 1) * 100 + (uint32_t)dt.tm_mday;
     }
 
     bool parseDate(const char *s, uint32_t &outDay)
     {
-        if (!s || strlen(s) < 10) return false;
-        int y = (s[0]-'0')*1000 + (s[1]-'0')*100 + (s[2]-'0')*10 + (s[3]-'0');
-        int mo = (s[5]-'0')*10 + (s[6]-'0');
-        int d  = (s[8]-'0')*10 + (s[9]-'0');
-        if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+        if (!s || strlen(s) < 10)
+            return false;
+        int y = (s[0] - '0') * 1000 + (s[1] - '0') * 100 + (s[2] - '0') * 10 + (s[3] - '0');
+        int mo = (s[5] - '0') * 10 + (s[6] - '0');
+        int d = (s[8] - '0') * 10 + (s[9] - '0');
+        if (mo < 1 || mo > 12 || d < 1 || d > 31)
+            return false;
         outDay = (uint32_t)y * 10000 + (uint32_t)mo * 100 + (uint32_t)d;
         return true;
     }
@@ -112,9 +125,11 @@ namespace sched
     // ---------- evaluation ----------
     bool evaluateWindows(const struct tm &dt)
     {
-        if (winCount == 0) return false;
+        if (winCount == 0)
+            return false;
         int maskIndex = (dt.tm_wday + 6) % 7; // Sun(0)->6, Mon(1)->0 ...
-        if (!(daysMask & (1 << maskIndex))) return false;
+        if (!(daysMask & (1 << maskIndex)))
+            return false;
 
         int nowMin = dt.tm_hour * 60 + dt.tm_min;
         for (int i = 0; i < winCount; i++)
@@ -127,15 +142,19 @@ namespace sched
 
     bool desiredState()
     {
-        if (override == Override::ON)  return true;
-        if (override == Override::OFF) return false;
+        if (override == Override::ON)
+            return true;
+        if (override == Override::OFF)
+            return false;
 
         bool exState;
         if (exceptionActive(localDayNow(), exState))
             return exState;
 
-        if (mode == Mode::ON)  return true;
-        if (mode == Mode::OFF) return false;
+        if (mode == Mode::ON)
+            return true;
+        if (mode == Mode::OFF)
+            return false;
         struct tm dt = ntp::getTM();
         return evaluateWindows(dt);
     }
@@ -155,7 +174,7 @@ namespace sched
         struct tm dt;
         localtime_r(&now, &dt);
         time_t best = 0;
-        bool   bestState = false;
+        bool bestState = false;
 
         for (int dayOffset = 0; dayOffset < 7; dayOffset++)
         {
@@ -163,25 +182,31 @@ namespace sched
             struct tm ds;
             localtime_r(&dayStart, &ds);
             ds.tm_hour = ds.tm_min = ds.tm_sec = 0;
-            uint32_t dayNum = (uint32_t)(ds.tm_year + 1900) * 10000
-                            + (uint32_t)(ds.tm_mon + 1) * 100
-                            + (uint32_t)ds.tm_mday;
+            uint32_t dayNum = (uint32_t)(ds.tm_year + 1900) * 10000 + (uint32_t)(ds.tm_mon + 1) * 100 + (uint32_t)ds.tm_mday;
             bool dummy;
-            if (exceptionActive(dayNum, dummy)) continue;
+            if (exceptionActive(dayNum, dummy))
+                continue;
 
             time_t dayEpoch = mktime(&ds);
 
             int maskIndex = (ds.tm_wday + 6) % 7;
-            if (!(daysMask & (1 << maskIndex))) continue;
+            if (!(daysMask & (1 << maskIndex)))
+                continue;
 
             for (int i = 0; i < winCount; i++)
             {
                 time_t startE = dayEpoch + windows[i].startMin * 60L;
                 if (startE > now && (best == 0 || startE < best))
-                { best = startE; bestState = true; }
+                {
+                    best = startE;
+                    bestState = true;
+                }
                 time_t endE = dayEpoch + windows[i].endMin * 60L;
                 if (endE > now && (best == 0 || endE < best))
-                { best = endE; bestState = false; }
+                {
+                    best = endE;
+                    bestState = false;
+                }
             }
         }
 
@@ -189,7 +214,8 @@ namespace sched
         nextTransitionState = bestState;
         if (best)
         {
-            struct tm te; localtime_r(&best, &te);
+            struct tm te;
+            localtime_r(&best, &te);
             Serial.printf("[SCHED] Next transition in %ld s -> %s\n",
                           (long)(best - now), bestState ? "ON" : "OFF");
         }
@@ -202,7 +228,10 @@ namespace sched
     // ---------- relay application ----------
     void applyRelay(bool on)
     {
-        relay::set(on); // drive the physical GPIO via actuators/relay
+        // The fan (relay 1) and UV (relay 2) usually run in tandem, so the
+        // schedule drives BOTH channels. Each channel remains independently
+        // controllable via the per-relay relay::set(Id, on) API.
+        relay::setBoth(on); // drive the physical GPIO via actuators/relay
     }
 
     void rearm()
@@ -212,7 +241,8 @@ namespace sched
         // without updating lastEvalDay and re-trigger the "Day rollover" branch
         // on every tick() call, flooding the serial log.
         lastEvalDay = localDayNow();
-        if (!ntp::timeSynced()) return;
+        if (!ntp::timeSynced())
+            return;
         bool want = desiredState();
         applyRelay(want);
         computeNextTransition();
@@ -240,7 +270,8 @@ namespace sched
         if (nextTransitionTime != 0)
         {
             time_t now = ntp::getTime();
-            struct tm te; localtime_r(&nextTransitionTime, &te);
+            struct tm te;
+            localtime_r(&nextTransitionTime, &te);
             char buf[32];
             strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", &te);
             Serial.printf("SCHED Next transition in %ld s -> %s (%s)\n",
@@ -261,7 +292,8 @@ namespace sched
         {
             if (exceptions[i].toDay >= today)
             {
-                if (w != i) exceptions[w] = exceptions[i];
+                if (w != i)
+                    exceptions[w] = exceptions[i];
                 w++;
             }
         }
@@ -274,10 +306,12 @@ namespace sched
 
     void evictOldestException()
     {
-        if (excCount == 0) return;
+        if (excCount == 0)
+            return;
         int oldest = 0;
         for (int i = 1; i < excCount; i++)
-            if (exceptions[i].fromDay < exceptions[oldest].fromDay) oldest = i;
+            if (exceptions[i].fromDay < exceptions[oldest].fromDay)
+                oldest = i;
         for (int i = oldest; i < excCount - 1; i++)
             exceptions[i] = exceptions[i + 1];
         excCount--;
@@ -288,13 +322,13 @@ namespace sched
     void saveToNVS()
     {
         nvs::putInt(nvsNamespace, nvsKeyMode, (int)mode);
-        nvs::putInt(nvsNamespace, nvsKeyOverride, (int)override);
+        nvs::putInt(nvsNamespace, nvsKeyOverride, (int) override);
         nvs::putInt(nvsNamespace, nvsKeyDays, (int)daysMask);
         nvs::putInt(nvsNamespace, nvsKeyWinCount, winCount);
         int buf[16] = {0};
         for (int i = 0; i < winCount && i < 8; i++)
         {
-            buf[i * 2]     = windows[i].startMin;
+            buf[i * 2] = windows[i].startMin;
             buf[i * 2 + 1] = windows[i].endMin;
         }
         nvs::putBytes(nvsNamespace, nvsKeyWins, buf, sizeof(buf));
@@ -316,7 +350,7 @@ namespace sched
 
     void loadFromNVS()
     {
-        mode     = (Mode)nvs::getInt(nvsNamespace, nvsKeyMode, (int)Mode::AUTO);
+        mode = (Mode)nvs::getInt(nvsNamespace, nvsKeyMode, (int)Mode::AUTO);
         override = (Override)nvs::getInt(nvsNamespace, nvsKeyOverride, (int)Override::NONE);
         daysMask = (uint8_t)nvs::getInt(nvsNamespace, nvsKeyDays, 0b1111100);
         winCount = nvs::getInt(nvsNamespace, nvsKeyWinCount, 0);
@@ -325,19 +359,20 @@ namespace sched
         for (int i = 0; i < winCount && i < 8; i++)
         {
             windows[i].startMin = buf[i * 2];
-            windows[i].endMin   = buf[i * 2 + 1];
+            windows[i].endMin = buf[i * 2 + 1];
         }
 
         excCount = nvs::getInt(nvsNamespace, nvsKeyExcCount, 0);
-        if (excCount > MAX_EXCEPTIONS) excCount = MAX_EXCEPTIONS;
+        if (excCount > MAX_EXCEPTIONS)
+            excCount = MAX_EXCEPTIONS;
         uint8_t ebuf[MAX_EXCEPTIONS * 9] = {0};
         nvs::getBytes(nvsNamespace, nvsKeyExc, ebuf, sizeof(ebuf));
         for (int i = 0; i < excCount; i++)
         {
             uint32_t *p = (uint32_t *)&ebuf[i * 9];
             exceptions[i].fromDay = p[0];
-            exceptions[i].toDay   = p[1];
-            exceptions[i].on      = ebuf[i * 9 + 8] != 0;
+            exceptions[i].toDay = p[1];
+            exceptions[i].on = ebuf[i * 9 + 8] != 0;
         }
 
         Serial.printf("[SCHED] Loaded NVS: mode=%s ovr=%s days=%d wins=%d exc=%d\n",
@@ -379,8 +414,8 @@ namespace sched
                 if (excCount >= MAX_EXCEPTIONS)
                     evictOldestException();
                 exceptions[excCount].fromDay = r->fromDay;
-                exceptions[excCount].toDay   = r->toDay;
-                exceptions[excCount].on      = r->on;
+                exceptions[excCount].toDay = r->toDay;
+                exceptions[excCount].on = r->on;
                 excCount++;
                 Serial.printf("[SCHED] Exception added (event): %s\n", r->on ? "ON" : "OFF");
             }
@@ -435,10 +470,11 @@ namespace sched
 
     void addException(uint32_t fromDay, uint32_t toDay, bool on)
     {
-        if (excCount >= MAX_EXCEPTIONS) return;
+        if (excCount >= MAX_EXCEPTIONS)
+            return;
         exceptions[excCount].fromDay = fromDay;
-        exceptions[excCount].toDay   = toDay;
-        exceptions[excCount].on      = on;
+        exceptions[excCount].toDay = toDay;
+        exceptions[excCount].on = on;
         excCount++;
         rearm();
         saveToNVS();
@@ -462,7 +498,8 @@ namespace sched
             const char *days = entry["Auto"]["days"] | "1111100";
             daysMask = 0;
             for (int i = 0; i < 7 && days[i]; i++)
-                if (days[i] == '1') daysMask |= (1 << i);
+                if (days[i] == '1')
+                    daysMask |= (1 << i);
 
             winCount = 0;
             JsonArray wins = entry["Auto"]["windows"];
@@ -470,22 +507,23 @@ namespace sched
             {
                 for (JsonArray w : wins)
                 {
-                    if (winCount >= 8) break;
+                    if (winCount >= 8)
+                        break;
                     int s, e;
                     if (parseHHMM(w[0] | "", s) && parseHHMM(w[1] | "", e))
                     {
                         windows[winCount].startMin = s;
-                        windows[winCount].endMin   = e;
+                        windows[winCount].endMin = e;
                         winCount++;
                     }
                 }
             }
             else
             {
-                int on  = entry["FilterOn"]   | 830;
-                int off = entry["FilterOff"]  | 1830;
-                int ls  = entry["LunchStart"] | 1230;
-                int le  = entry["LunchEnd"]   | 1430;
+                int on = entry["FilterOn"] | 830;
+                int off = entry["FilterOff"] | 1830;
+                int ls = entry["LunchStart"] | 1230;
+                int le = entry["LunchEnd"] | 1430;
                 windows[0] = {hhmmToMin(on), hhmmToMin(ls)};
                 windows[1] = {hhmmToMin(le), hhmmToMin(off)};
                 winCount = 2;
@@ -500,16 +538,17 @@ namespace sched
         JsonArray excs = entry["Exceptions"];
         for (JsonObject x : excs)
         {
-            if (excCount >= MAX_EXCEPTIONS) break;
+            if (excCount >= MAX_EXCEPTIONS)
+                break;
             const char *from = x["from"] | "";
-            const char *to   = x["to"]   | "";
-            const char *st   = x["state"] | "off";
+            const char *to = x["to"] | "";
+            const char *st = x["state"] | "off";
             uint32_t fd, td;
             if (parseDate(from, fd) && parseDate(to, td))
             {
                 exceptions[excCount].fromDay = fd;
-                exceptions[excCount].toDay   = td;
-                exceptions[excCount].on      = (strcmp(st, "on") == 0);
+                exceptions[excCount].toDay = td;
+                exceptions[excCount].on = (strcmp(st, "on") == 0);
                 excCount++;
             }
         }

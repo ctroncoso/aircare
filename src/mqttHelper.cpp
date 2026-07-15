@@ -66,10 +66,10 @@ namespace mqtt
     //   - a single NVS blob is capped at ~1984 bytes, so we write the queue
     //     as fixed-size chunks of Q_CHUNK samples (Q_CHUNK*Q_SLOT < 1984).
     // ------------------------------------------------------------------------
-    static const size_t  Q_SLOT        = 300;   // matches app.cpp serializedString[300]
-    static const int     Q_CAP         = 64;    // RAM ring capacity (~1 h @ 1/min, ~19 KB)
+    static const size_t  Q_SLOT        = 512 + 1; // matches app.cpp serializedString[512+1] so buffered samples are never truncated
+    static const int     Q_CAP         = 64;    // RAM ring capacity (~1 h @ 1/min, ~33 KB)
     static const int     Q_PERSIST_MAX = 30;    // max samples mirrored to NVS (~30 min)
-    static const int     Q_CHUNK       = 6;     // samples per NVS blob (6*300 = 1800 < 1984)
+    static const int     Q_CHUNK       = 3;     // samples per NVS blob (3*513 = 1539 < 1984 cap)
 
     static char   g_queue[Q_CAP][Q_SLOT];
     static int    g_qHead  = 0;   // index of oldest sample
@@ -218,7 +218,7 @@ namespace mqtt
 
         client.setCallback(callback);
         // Must be large enough for the /cleanair/sensor telemetry packet
-        // (topic + ~300-byte serializedString + MQTT header). 256 was too
+        // (topic + up to 512-byte serializedString + MQTT header). 256 was too
         // small, causing publish() to silently drop measurements.
         client.setBufferSize(512);
         client.setKeepAlive(MQTT_KEEPALIVE_S);
@@ -402,7 +402,9 @@ namespace mqtt
 
         doc["rssi"] = WiFi.RSSI();                 // dBm (negative; higher = better)
         doc["uptime_ms"] = millis();
-        doc["relay"] = relay::state() ? "ON" : "OFF";
+        doc["relay"] = relay::state(1) ? "ON" : "OFF";   // fan channel (relay 1)
+        doc["relay2"] = relay::state(2) ? "ON" : "OFF";  // UV channel (relay 2)
+        doc["relay_both"] = relay::bothOn() ? "ON" : "OFF";
 
         serializeJson(doc, reportBuf);
         mqtt::mqttPublish("cleanair/events", reportBuf);

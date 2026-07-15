@@ -25,6 +25,13 @@ inline const int ledPinG = 27;
 inline const int rlPin1 = 32;
 inline const int rlPin2 = 33;
 
+// ---- Remote manifest URLs (served from the GitHub repo) ----
+// Centralised so a branch/staging switch doesn't require code edits scattered
+// across schedule.cpp and otaHelper.cpp.
+#define REMOTE_BASE_URL "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins"
+inline const char *scheduleURL = REMOTE_BASE_URL "/schedule.json";
+inline const char *updateURL   = REMOTE_BASE_URL "/update.json";
+
 // ---- CO2 condition state machine ----
 enum class CO2_Condition
 {

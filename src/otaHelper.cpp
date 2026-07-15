@@ -1,5 +1,6 @@
 // otaHelper.cpp — OTA firmware update check implementation.
 #include "otaHelper.h"
+#include "core/board.h"  // updateURL — centralised manifest URL constant
 #include "mqttHelper.h"  // publishEvent / client.connected() — guarded, see below
 
 namespace ota
@@ -70,7 +71,7 @@ namespace ota
         // in one pass, so we no longer do a separate DONT_DO_UPDATE probe (that
         // introduced a TOCTOU where update.json could change between calls).
         int ret = ota.AllowDowngrades(true)
-                      .CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json",
+                      .CheckForOTAUpdate(updateURL,
                                          PROGRAM_VERSION);
 
         bool installed = (ret == ESP32OTAPull::UPDATE_OK ||
