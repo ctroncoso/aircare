@@ -207,8 +207,12 @@ namespace sched
 
     void rearm()
     {
-        if (!ntp::timeSynced()) return;
+        // Always advance the evaluated day first. Otherwise, if NTP is not yet
+        // synced (or drops sync at the midnight boundary), we would return early
+        // without updating lastEvalDay and re-trigger the "Day rollover" branch
+        // on every tick() call, flooding the serial log.
         lastEvalDay = localDayNow();
+        if (!ntp::timeSynced()) return;
         bool want = desiredState();
         applyRelay(want);
         computeNextTransition();
