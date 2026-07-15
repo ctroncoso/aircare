@@ -1,0 +1,5 @@
+# secrets / local overrides — never commit
+.env
+
+# Node-RED flow (contains InfluxDB token)
+nodered/flows.json

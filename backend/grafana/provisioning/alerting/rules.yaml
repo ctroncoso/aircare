@@ -1,0 +1,130 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: aircare
+    folder: AirCare
+    interval: 1m
+    rules:
+      - uid: aircare-co2-high
+        title: CO2 High (>=800 ppm)
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: critical
+          system: aircare
+        annotations:
+          summary: "CO2 at or above 800 ppm on device {{ $labels.mac }}"
+          description: "co2_fc reached {{ $values.B }} ppm (red band). Ventilation may be needed."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: P951FEA4DE68E13C5
+            model:
+              refId: A
+              datasource:
+                type: influxdb
+                uid: P951FEA4DE68E13C5
+              query: |
+                from(bucket: "aircare")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "sensor" and r._field == "co2_fc")
+                  |> group(columns: ["mac"])
+                  |> last()
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 800
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+                  type: query
+
+      - uid: aircare-device-offline
+        title: Device Offline (no telemetry 10m)
+        condition: C
+        for: 0m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: warning
+          system: aircare
+        annotations:
+          summary: "No AirCare telemetry received in the last 10 minutes"
+          description: "No points on measurement 'sensor' in the last 10m. A device may be offline or the ingest path is down."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: P951FEA4DE68E13C5
+            model:
+              refId: A
+              datasource:
+                type: influxdb
+                uid: P951FEA4DE68E13C5
+              query: |
+                from(bucket: "aircare")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "sensor" and r._field == "co2_fc")
+                  |> count()
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: sum
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 1
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+                  type: query

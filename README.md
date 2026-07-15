@@ -1,6 +1,6 @@
 # AirCare — Indoor Air Quality Monitor
 
-**Version:** 1.1.12 | **Board:** ESP32 Dev Module | **Framework:** Arduino
+**Version:** 1.1.13 | **Board:** ESP32 Dev Module | **Framework:** Arduino
 
 AirCare is an IoT firmware for the ESP32 microcontroller that monitors indoor air quality using two main sensors:
 
@@ -15,23 +15,69 @@ The device reads sensor data on a configurable interval, publishes the measureme
 
 - [AirCare — Indoor Air Quality Monitor](#aircare--indoor-air-quality-monitor)
   - [Table of Contents](#table-of-contents)
+  - [Architecture](#architecture)
   - [Hardware Overview](#hardware-overview)
   - [Core Application Flow](#core-application-flow)
   - [Modules / File Descriptions](#modules--file-descriptions)
-    - [`globals.h`](#globalsh)
-    - [`main.cpp`](#maincpp)
-    - [`mainHelper.h`](#mainhelperh)
-    - [`wifiManagerHelper.h`](#wifimanagerhelperh)
-    - [`mqttHelper.h`](#mqtthelperh)
-    - [`ledHelper.h`](#ledhelperh)
-    - [`bmeHelper.h`](#bmehelperh)
-    - [`sunrise_i2c.h` / `sunrise_i2c.cpp`](#sunrise_i2ch--sunrise_i2ccpp)
-    - [`sunriseHelper.h`](#sunrisehelperh)
-    - [`ntpHelper.h`](#ntphelperh)
-    - [`otaHelper.h`](#otahelperh)
-    - [`scheduleHelper.h`](#schedulehelperh)
+    - [`core/` — shared foundation](#core--shared-foundation)
+    - [`src/app/app.*`](#srcappapp)
+    - [`src/main.cpp`](#srcmaincpp)
+    - [`src/wifiManagerHelper.*`](#srcwifimanagerhelper)
+    - [`src/mqttHelper.*`](#srcmqtthelper)
+    - [`src/configHelper.*`](#srcconfighelper)
+    - [`src/ledHelper.*`](#srcledhelper)
+    - [`src/bmeHelper.*`](#srcbmehelper)
+    - [`src/sunrise_i2c.*` / `src/sunriseHelper.*`](#srcsunrise_i2c--srcsunrisehelper)
+    - [`src/ntpHelper.*`](#srcntpphelper)
+    - [`src/otaHelper.*`](#srcotahelper)
+    - [`src/config/schedule.*`](#srcconfigschedule)
+    - [`src/actuators/relay.*`](#srcactuatorsrelay)
   - [Dependencies](#dependencies)
   - [Configuration](#configuration)
+
+---
+
+## Architecture
+
+The firmware was restructured from a flat collection of header-only "helper"
+files into a small layered module tree. Each module owns one concern and exposes
+a `.h`/`.cpp` pair (declarations in the header, definitions in the `.cpp`).
+Cross-module signalling no longer uses shared `volatile` handshake flags; it uses
+a tiny synchronous **event bus** (`core/events.h`).
+
+```
+src/
+  main.cpp                 # orchestration: setup()/loop(), button handlers
+  globals.h                # slim shared state (co2_State, espClient, wm)
+  core/
+    board.{h,cpp}          # pins, build constants, enums, remote URLs
+    events.{h,cpp}         # synchronous publish/subscribe event bus
+    nvsStore.{h,cpp}       # Preferences (NVS) wrapper
+    httpFetch.{h,cpp}      # HTTPS fetch-by-MAC JSON helper
+    co2check.h             # standalone CO2 sample validity check (unit-tested)
+  app/
+    app.{h,cpp}            # measurement/update cycles + telemetry buffer
+  config/
+    schedule.{h,cpp}       # event-driven relay scheduler (policy)
+    configHelper.{h,cpp}   # dynamic MQTT broker config
+  actuators/
+    relay.{h,cpp}          # relay GPIO driver (hardware)
+  net/sensors helpers:
+    wifiManagerHelper.*    # WiFi connect + captive portal
+    mqttHelper.*           # MQTT client (TLS, queue, backoff)
+    ntpHelper.*            # SNTP + Chile local time
+    otaHelper.*            # OTA via ESP32OTAPull
+    bmeHelper.*            # BME280 driver
+    sunriseHelper.*        # Sunrise high-level init
+    sunrise_i2c.{h,cpp}    # Sunrise low-level I2C register driver
+```
+
+**Event bus.** Modules `subscribe()` a handler and `emit()` events; nobody
+shares a flag. Events: `NtpSynced`, `RelayOverride`, `RelayAuto`,
+`ExceptionSet`, `ExceptionClear`, `BrokerChanged`. Example: the scheduler
+subscribes to `NtpSynced` (re-arm its timeline) and to the MQTT-injected
+`RelayOverride`/`ExceptionSet`; NTP and MQTT simply `emit` without knowing who
+listens. See `Refactoring.md` for the full rationale.
 
 ---
 
@@ -53,206 +99,261 @@ The device reads sensor data on a configurable interval, publishes the measureme
 
 ## Core Application Flow
 
-1. **`setup()`** — initialises serial, LED pins, WiFi, MQTT, NTP, the CO₂ sensor, and the BME280. It also checks for an OTA update on boot. If any critical sensor fails, the ESP32 restarts.
+1. **`setup()`** — initialises serial, the status LEDs (including a POST blink
+   sequence), the relay pins (forced OFF out of reset), WiFi, NTP, the relay
+   schedule, an OTA check, the dynamic broker config, MQTT, and finally the two
+   sensors. A critical sensor failure keeps the MQTT keepalive alive long enough
+   to deliver an error event, then restarts the MCU.
 2. **`loop()`** — runs continuously:
-   - Polls the button for user interaction.
-   - Calls **`measurementTick()`** every 1 minute to read sensors, control relays, and publish data.
-   - Calls **`updateTick()`** every 10 minutes to check for OTA updates.
-   - Keeps the MQTT connection alive.
+   - Polls the BOOT button (`OneButton`).
+   - Calls **`measurementTick()`** every 1 minute to read sensors, validate the
+     CO₂ sample, publish telemetry, and update the LED.
+   - Calls **`sched::tick()`** every iteration — an edge-triggered scheduler
+     that fires relay transitions when their pre-computed time arrives.
+   - Calls **`updateTick()`** every 10 minutes to check OTA and refresh the
+     remote schedule + broker config.
+   - Pumps the MQTT client (keepalive + inbound) and reconnects with backoff.
 
 ---
 
 ## Modules / File Descriptions
 
 ### `globals.h`
-**Global definitions, pin assignments, and shared state.**
+**Minimal cross-cutting shared state** (the old "god header" was slimmed during
+the refactor; see `Refactoring.md`).
 
-- **Macros/Constants** — `SEALEVELPRESSURE_HPA` (1013.25 hPa), `PROGRAM_VERSION`, `CO2_LOW` / `CO2_HIGH` thresholds (700 / 800 ppm), `PORTAL_NAME` (“AIRCARE”), `PORTAL_TIMEOUT`, `measurementDelay` (1 min), `updateDelay` (10 min).
-- **Pin assignments** — Red LED (25), Yellow LED (26), Green LED (27), Relay 1 (32), Relay 2 (33).
-- **`CO2_Condition` enum** — `Green` / `Yellow` / `Red` / `Unknown`, used to pick the active LED.
-- **`pub_event` enum** — `ERROR` = -1, `INFO` = 0, used when publishing MQTT events.
-- **Shared variables** — `doc` (JSON document), `serializedString`, `co2_State`, `WiFiClient`, `WiFiManager`.
+- **Constants/enums** now live in `core/board.h`: `PROGRAM_VERSION`,
+  `CO2_LOW` / `CO2_HIGH` (700 / 800 ppm), `PORTAL_NAME`, `PORTAL_TIMEOUT`,
+  `measurementDelay` (1 min), `updateDelay` (10 min), `CO2_Condition`,
+  `pub_event` (`ERROR = -1`, `INFO = 0`), and the remote manifest URLs.
+- **Shared state:** `co2_State` (set by `app`, read by `leds` to restore the LED
+  after a blink), `espClient` (`WiFiClientSecure`, bound by `mqtt`), and `wm`
+  (`WiFiManager`, used by `main.cpp` to open the portal on button press).
 
 ---
 
-### `main.cpp`
+### `core/` — shared foundation
+
+#### `core/board.h`
+Hardware pins, build constants, enums, and the centralised remote URLs
+(`REMOTE_BASE_URL`, `scheduleURL`, `updateURL`). Replaces the old monolithic
+`globals.h`.
+
+#### `core/events.h` / `core/events.cpp`
+Synchronous event bus (see [Architecture](#architecture)). Fixed-size handler
+table (`MAX_HANDLERS = 8`), no heap use.
+
+#### `core/nvsStore.h` / `core/nvsStore.cpp`
+Thin `Preferences` wrapper: `getInt` / `getString` / `getBytes` /
+`putInt` / `putString` / `putBytes` plus `withRead` / `withWrite` RAII
+helpers. Used by the scheduler and broker config for persistence.
+
+#### `core/httpFetch.h` / `core/httpFetch.cpp`
+`http::fetchJsonByMac(url, mac, doc [, arrayKey][, defaultKey])` — performs an
+HTTPS GET, finds the `Devices` entry whose `Device` equals this MCU's MAC
+(or falls back to a `Default` entry), and returns a `FetchResult { ok, matched,
+entry }`. Used by both `configHelper` and the schedule fetcher so the
+"download + match by MAC" logic is defined once.
+
+#### `core/co2check.h`
+`co2Valid(uint16_t)` — pure, Arduino-free validity check (rejects `0` and
+`>= 10000`). Extracted so the boundary logic is unit-tested in the native
+(`host`) environment.
+
+---
+
+### `src/app/app.*`
+**Measurement and update scheduling** (replaces the old `mainHelper.h`).
+
+| Function                | Description |
+|-------------------------|-------------|
+| `readValues()`          | Reads temperature, pressure, altitude, humidity from the BME280, and the four CO₂ readings (`co2_fc`/`co2_uc`/`co2_fu`/`co2_uu`) from the Sunrise sensor. |
+| `getCO2_State()`        | Returns a `CO2_Condition` from the CO₂ ppm: Green (< 700), Yellow (700–800), Red (≥ 800). |
+| `printValues()`         | Builds the JSON telemetry document, serialises it into a bounded `512+1` buffer, and prints it (plus the next-transition line). |
+| `state2string()`        | Converts the current CO₂ condition to a human‑readable string. |
+| `measurementTick()`     | Every 1 min: reads sensors, **validates** the CO₂ sample (`co2Valid()` + error-status); if invalid it skips publish/LED so a stale/zero reading never shows as "Green". Otherwise publishes `/cleanair/sensor` and updates the LED. Also emits periodic HEALTH telemetry every 5 min. |
+| `updateTick()`          | Every 10 min: runs `ota::checkUpdate()`, then refreshes the remote schedule and broker config (skipped while an OTA is in progress). |
+
+---
+
+### `src/main.cpp`
 **Entry point: `setup()` and `loop()`.**
 
 | Function               | Description |
 |------------------------|-------------|
-| `setup()`              | Initialises serial, LEDs, WiFi, MQTT, NTP, CO₂ sensor, BME280, and relay pins. Sends boot events over MQTT. Restarts the MCU if a sensor fails. |
-| `loop()`               | Main loop: polls the button, runs the measurement cycle (`measurementTick`) and update cycle (`updateTick`), and keeps the MQTT client alive. |
-| `startWifiPortal()`    | Triggered by a double‑click on the BOOT button. Opens the WiFiManager configuration portal. |
+| `setup()`              | Initialises serial, LEDs (POST), relay pins, WiFi, NTP, schedule, OTA, dynamic broker config, MQTT, and the sensors. Sends boot events. Restarts the MCU if a sensor fails. |
+| `loop()`               | Polls the button, runs `measurementTick()` / `sched::tick()` / `updateTick()`, and pumps MQTT. |
+| `startWifiPortal()`    | Triggered by a double‑click on the BOOT button. Opens the WiFiManager portal, then reboots. |
 | `handleMultiClick()`   | Triggered by a multi‑click (≥3 clicks). Starts an OTA check on 3 clicks. |
+| `brokerChangedHandler()` | Event-bus handler: on `BrokerChanged` it disconnects the MQTT client so the next reconnect binds to the new endpoint. |
 
 ---
 
-### `mainHelper.h`
-**Measurement and update scheduling.**
-
-| Function                | Description |
-|-------------------------|-------------|
-| `readValues()`          | Reads temperature, pressure, altitude, and humidity from the BME280, and the four CO₂ readings (filtered/unfiltered, compensated/uncompensated) from the Sunrise sensor. |
-| `getCO2_State()`        | Returns a `CO2_Condition` based on the CO₂ ppm value: Green (< 700), Yellow (700–800), Red (≥ 800). |
-| `printValues()`         | Builds a JSON document with all sensor values and the current state, then serialises and prints it. |
-| `state2string()`        | Converts the current CO₂ condition to a human‑readable string. |
-| `measurementTick()`     | Called every 1 min. Reads sensors, prints values (including `sched_mode`, `sched_ovr`, `sched_exc` and the "next transition" line), publishes to MQTT at `/cleanair/sensor`, and updates the LEDs. The relay itself is driven by the event-driven `sched::tick()` (see `scheduleHelper.h`), not here. |
-| `updateTick()`          | Called every 10 min. Triggers `ota::checkUpdate()`. |
-| `testRelay()`           | Utility that activates both relays for 10 seconds, then turns them off. |
-
----
-
-### `wifiManagerHelper.h`
+### `src/wifiManagerHelper.*`
 **WiFi connection and captive portal.**
 
 | Function            | Description |
 |---------------------|-------------|
-| `initWifiM()`       | Attempts to connect to a saved WiFi network using `WiFiManager.autoConnect()`. Retries up to 5 times with a 60‑second delay between attempts. If it fails, the MCU restarts. |
-| `configModeCallback()` | Callback invoked when the WiFiManager enters AP mode — blinks the green LED 4 times to signal that the configuration portal is active. |
+| `initWifiM()`       | Connects via `WiFiManager.autoConnect()`; retries up to 5 times with a 60‑second delay between attempts. Returns `false` if all fail (caller restarts the MCU). |
+| `configModeCallback()` | Invoked when WiFiManager enters AP mode — blinks the green LED 4 times. |
 
 ---
 
-### `mqttHelper.h`
-**MQTT client management.**
+### `src/mqttHelper.*`
+**MQTT client management** (TLS, queue, backoff).
 
 | Function              | Description |
 |-----------------------|-------------|
-| `initMQTT()`          | Configures the `PubSubClient` (server: `52.23.110.164`, port 1883, buffer size 256, keep‑alive 15 s) and attempts an initial connection. |
-| `mqttreconnect()`     | Tries to reconnect to the MQTT broker up to 12 times (5 s apart). Restarts the MCU if all attempts fail. |
-| `mqttPublish()`       | Publishes a string payload to a given MQTT topic. Calls `mqttreconnect()` if the client is disconnected. |
-| `publishEvent()`      | Constructs a JSON event (`event`, `param`, `mac`, `fw`) and publishes it to `cleanair/events`. |
-| `callback()`          | Handles incoming MQTT commands (see below) and prints the topic/payload to Serial. |
+| `initMQTT()`          | Configures `PubSubClient` against the **dynamic** broker (`cfg::brokerHost` / `cfg::brokerPort`, TLS on 8883, buffer 512, keep‑alive 30 s) and connects with exponential backoff. On failure it returns `false` and the firmware continues running without a broker. |
+| `mqttTryReconnect()`  | Single reconnect attempt used by `mqttLoop()`. |
+| `subscribeCommands()` | Subscribes to the command topics (see below) and confirms on the events channel. |
+| `mqttLoop()`          | Called every `loop()`: pumps keepalive, reconnects with exponential backoff (1 s → 30 s cap) on link drop, and flushes the buffered queue on (re)connect. |
+| `mqttPump()`          | Pumps the client **without** reconnecting — used during blocking waits (sensor init, HTTP fetches) to keep the socket alive. |
+| `mqttPublish()`       | Publishes to a topic. If the link is down, **`cleanair/sensor`** samples are queued (RAM + NVS) and replayed on reconnect; all other topics are dropped while disconnected. |
+| `publishEvent()`      | Builds a JSON event (`event`, `param`, `mac`, `fw`) and publishes to `cleanair/events`. |
+| `publishReport()`     | Status snapshot (MAC, local time, RSSI, uptime, relay states) in response to a `REPORT` command. |
+| `callback()`          | Handles inbound commands (below). |
+
+**Telemetry buffering.** While the broker is unreachable, `cleanair/sensor`
+samples are held in a bounded RAM ring and mirrored to NVS (latest ~30 min) so a
+reboot during the outage doesn't lose them. They are drained on the next
+successful reconnect (with a `MQTT|RECOVERED` event).
 
 **Subscribed topics on connect:**
 - `AirCare/inCommands/broadcast`
 - `AirCare/inCommands/<MAC address>`
 
 **Remote commands** (JSON payloads):
-- `{"cmd":"RELAY","value":"ON"|"OFF"|"AUTO"}` — sticky manual override. `ON`/`OFF` force the relay regardless of schedule; `AUTO` clears the override and returns control to the schedule. Persisted to NVS.
+- `{"cmd":"RELAY","value":"ON"|"OFF"|"AUTO"}` — sticky manual override. `ON`/`OFF` force the relay regardless of schedule; `AUTO` clears the override. Persisted to NVS.
 - `{"cmd":"EXCEPTION","from":"YYYY-MM-DD","to":"YYYY-MM-DD","state":"on"|"off"}` — add a date-range exception (holiday / vacation / onsite testing). Persisted to NVS; auto-expires and round-robins when the 4-slot list is full.
 - `{"cmd":"EXCEPTION_CLEAR"}` — remove all exceptions.
+- `{"cmd":"REBOOT"}` — remote restart.
+- `{"cmd":"UPDATE"|"UPDATE_NOW"}` — force an immediate OTA check/install.
+- `{"cmd":"REPORT"}` — reply with a status snapshot.
+
+> **Security note:** the TLS client uses `setInsecure()` (no certificate
+> verification), consistent with the HTTPS config fetch. For production, supply
+> the broker's root CA via `setCACert()`.
 
 ---
 
-### `ledHelper.h`
+### `src/configHelper.*`
+**Dynamic MQTT broker configuration.** Mirrors the scheduler's
+"fetch-from-remote-JSON → persist → refresh" pattern so the broker endpoint
+(host + port) can change without reflashing every device.
+
+Resolution order per device:
+1. matching MAC entry in the `Devices` array of `config.json`;
+2. the top-level `Default` entry;
+3. last value persisted in NVS;
+4. the compiled-in `FALLBACK_BROKER` / `FALLBACK_PORT` (HiveMQ Cloud).
+
+On a change, it emits `Evt::BrokerChanged` so the main loop disconnects and
+rebinds. Invalid endpoints (`0.0.0.0`, empty, bad port) are rejected to avoid
+severing the remote channel.
+
+---
+
+### `src/ledHelper.*`
 **Visual indicators.**
 
 | Function                   | Description |
 |----------------------------|-------------|
 | `initLEDS()`               | Sets the three LED pins as outputs and clears them. |
+| `POSTBlinks()`             | Power‑On Self Test — blinks red, yellow, green in sequence (called from `setup()`). |
 | `clearLeds()`              | Turns off all three LEDs. |
-| `setLedOnCO2Condition()`   | Lights up the LED corresponding to the current `CO2_Condition` (Green, Yellow, Red, or unknown). |
-| `blinkLed()`               | Blinks a given LED a specified number of times. Optionally restores the CO₂ condition LED after blinking. |
-| `flipLed()`                | Toggles the state of a given LED pin (used during OTA progress). |
-| `POSTBlinks()`             | Power‑On Self Test — blinks red, yellow, and green LEDs in sequence (currently commented out in `initLEDS()`). |
+| `setLedOnCO2Condition()`   | Lights the LED matching the current `CO2_Condition`. |
+| `blinkLed()`               | Blinks a given LED N times; optionally restores the CO₂ condition LED. |
+| `flipLed()`                | Toggles a pin (used during OTA progress). |
 
 ---
 
-### `bmeHelper.h`
+### `src/bmeHelper.*`
 **BME280 temperature, humidity and pressure sensor.**
 
 | Function    | Description |
 |-------------|-------------|
-| `initBME()` | Initialises the BME280 at I²C address `0x76` and sets sampling to 16× oversampling for temperature, humidity, and pressure (normal mode, filter off). Returns `false` if the sensor is not found. |
+| `initBME()` | Initialises the BME280 at I²C `0x76` with 16× oversampling (normal mode, filter off). Returns `false` if not found. |
 
-**Global variables exposed:** `temp`, `pressure`, `altitude`, `humidity`.
-
----
-
-### `sunrise_i2c.h` / `sunrise_i2c.cpp`
-**Low-level I²C driver for the Senseair Sunrise CO₂ sensor.**
-
-This class provides the complete register map for the Sunrise sensor. Key public methods:
-
-| Method                        | Description |
-|-------------------------------|-------------|
-| `initSunrise()`               | Initialises I²C (SDA=21, SCL=22, 100 kHz) and checks for sensor presence at address `0x68`. Retries up to 10 times. |
-| `readCO2(CO2Type)`            | Reads a 16‑bit CO₂ value from one of four registers: filtered/compensated, unfiltered/compensated, filtered/uncompensated, unfiltered/uncompensated. |
-| `readErrorStatus()`           | Reads the 16‑bit error status register. |
-| `readChipTemp()`              | Reads the chip internal temperature. |
-| `readMeasurementCount()`      | Returns the number of measurements performed. |
-| `readMeasurementCycleTime()`  | Returns the current measurement cycle time. |
-| `setMeasurementMode(mode)`    | Sets continuous (`0x00`) or single (`0x01`) measurement mode. |
-| `setMeasurementPeriod(ms)`    | Sets the measurement period in seconds. |
-| `setNbrSamples(n)`            | Sets the number of samples per measurement. |
-| `resetSensor()`               | Resets the sensor by writing `0xFF` to the reset register. |
-| `startSingleMeasurement()`    | Starts a single measurement (for use in single-shot mode). |
-| `getSingleReading(co2_type, readyPin)` | Performs a full power‑down / single‑measurement / power‑up cycle, saving and restoring the sensor state. |
-| `incrementABCTime()`          | Increments the ABC (Automatic Baseline Correction) time counter stored in RTC memory. |
-| `readABCTime()` / `writeABCTime()` | Read/write the ABC elapsed time register. |
-| `setABCPeriod()`              | Sets the ABC period. |
-| `setABCTarget()`              | Sets the ABC target concentration. |
-| `setIIRFilter()`              | Configures the internal IIR filter parameter. |
-| `readCalibrationStatus()` / `clearCalibrationStatus()` / `setCalibrationCommand()` | Calibration management. |
-| `readPowerDownData()` / `writePowerDownData()` | Saves/restores 24 bytes of sensor state to RTC memory for low‑power single‑shot operation. |
-| `setMeterControl()` / `readMeterControl()` | Read/write the meter control register. |
-| `setI2cAddress()`             | Changes the sensor’s I²C address (requires a subsequent reset). |
-
-**Internal I²C helpers (file‑static):**
-- `wakeUp()` — sends repeated start conditions to wake the sensor from sleep (up to 5 attempts).
-- `read8bitSigned()` — reads a single signed byte from a register.
-- `write8bit()` — writes a single byte to a register.
-- `read16bitSigned()` — reads a 16‑bit signed integer (big‑endian) from a register.
-- `write16bit()` — writes a 16‑bit value (two bytes) to a register.
+**State:** `bme::temp`, `bme::pressure`, `bme::altitude`, `bme::humidity`.
 
 ---
 
-### `sunriseHelper.h`
-**High‑level Sunrise sensor initialisation.**
+### `src/sunrise_i2c.*` / `src/sunriseHelper.*`
+**Senseair Sunrise CO₂ sensor** — `sunrise_i2c.*` is the low-level I²C register
+driver (full register map: measurement mode/period/samples, ABC, IIR filter,
+calibration, power-down data, single-shot reads, etc.). `sunriseHelper.*` is the
+high-level init wrapper.
 
 | Function          | Description |
 |-------------------|-------------|
-| `initCo2Sensor()` | Calls `initSunrise()`, configures the measurement period (from `measurementDelay`), sets 16 samples, enables continuous mode, resets the sensor, and waits for the first measurement to complete (up to 20 attempts). Returns `false` if the initialisation or first measurement times out. |
+| `initCo2Sensor()` (`sunriseHelper`) | Calls `initSunrise()`, sets the measurement period (from `measurementDelay`), 16 samples, continuous mode, resets, and waits for the first measurement (up to 20 attempts). Returns `false` on timeout. |
 
-**Global variables exposed:** `co2_fc`, `co2_uc`, `co2_fu`, `co2_uu` (the four CO₂ readings).
+**State:** `co2_fc` (filtered/compensated), `co2_uc` (unfiltered/compensated),
+`co2_fu` (filtered/uncompensated), `co2_uu` (unfiltered/uncompensated). Only
+`co2_fc` drives logic; the other three are telemetry-only.
 
 ---
 
-### `ntpHelper.h`
+### `src/ntpHelper.*`
 **Network Time Protocol synchronisation.**
 
 | Function              | Description |
 |-----------------------|-------------|
-| `initNTP()`           | Configures SNTP with servers `ntp.shoa.cl` and `time.nist.gov`, applies the Chile local‑time timezone rule (see below), sets the time‑sync notification callback, and enables DHCP server mode. Publishes an MQTT event and blinks the yellow LED 3 times. |
-| `getTime()`           | Returns the current Unix epoch timestamp (seconds). |
-| `getTM()`             | Returns the **local Chile time** (America/Santiago, DST‑aware) as a `struct tm`. |
-| `timeavailable()`     | Callback invoked when the time is synchronised — prints the new local time. |
-| `printLocalTime()`    | Prints the current **local** date/time to Serial in human‑readable format. |
+| `initNTP()`           | Configures SNTP (`ntp.shoa.cl`, `time.nist.gov`), applies the Chile local-time TZ rule, sets the sync callback, enables DHCP SNTP. Blinks the yellow LED 3 times. |
+| `getTime()`           | Current Unix epoch (seconds). |
+| `getTM()`             | **Local Chile time** (America/Santiago, DST-aware) as `struct tm`. |
+| `timeavailable()`     | Sync callback — prints local time and emits `Evt::NtpSynced`. |
+| `printLocalTime()`    | Prints the current local date/time. |
 
-**Timezone:** The device runs on **Chile local time with automatic daylight saving** (CLT = UTC‑4 in winter, CLST = UTC‑3 in summer; DST starts 1st Sunday of September, ends 1st Sunday of April). newlib has no IANA tz database, so this is encoded as a POSIX TZ rule applied in `initNTP()` via `setenv("TZ", "<-04>4<-03>,M9.1.6/24,M4.1.6/24", 1); tzset();`. All scheduling and time displays use this local time.
+**Timezone:** Chile local time with automatic DST (CLT = UTC‑4 winter, CLST =
+UTC‑3 summer; DST starts 1st Sunday of September, ends 1st Sunday of April),
+encoded as a POSIX TZ rule in `initNTP()`.
 
 ---
 
-### `otaHelper.h`
-**Over‑The‑Air firmware update via `ESP32OTAPull`.**
+### `src/otaHelper.*`
+**Over-The-Air firmware update via `ESP32OTAPull`.**
 
 | Function          | Description |
 |-------------------|-------------|
-| `checkUpdate()`   | Checks for OTA updates by fetching an update manifest from `https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json`. If an update is available, blinks all three LEDs and downloads/installs the new firmware. Returns `false` after the check. |
-| `callback()`      | Progress callback — prints the download percentage and toggles the yellow LED during the update. |
-| `errtext(code)`   | Returns a human‑readable error string for an OTA result code. |
+| `checkUpdate()`   | Fetches the update manifest from `updateURL` (centralised in `core/board.h`), downloads/installs if a newer version exists, then reboots to apply. Guards the OTA window so `updateTick()` skips the other blocking fetches that cycle. |
+| `callback()`      | Progress callback — prints percentage and toggles the yellow LED. |
+| `errtext(code)`   | Human‑readable OTA result string. |
+
+> **Partition table:** the device ships with a per-device OTA partition layout
+> flashed at the factory; `platformio.ini` intentionally keeps
+> `board_build.partitions` commented so a default `pio run` does not overwrite
+> it. Do not enable it without also flashing the matching partitions.
 
 ---
 
-### `scheduleHelper.h`
-**Event-driven relay scheduler (replaces the old per-minute HHMM polling).**
+### `src/config/schedule.*`
+**Event-driven relay scheduler** (policy only — drives the relay via
+`actuators/relay`, never touches pins directly). Replaces the old
+`scheduleHelper.h`.
 
-The relay's desired state is *evaluated* (never replayed), so NTP jumps or missed ticks always land in the correct state. `loop()` calls `sched::tick()` every iteration; it fires a transition only when its pre-computed edge is due (edge-triggered, no relay chatter).
+The relay's desired state is *evaluated* (never replayed), so NTP jumps or
+missed ticks always land in the correct state. `loop()` calls `sched::tick()`
+every iteration; it fires a transition only when its pre-computed edge is due
+(edge-triggered, no relay chatter).
 
-**Precedence (highest → lowest):** sticky MQTT `RELAY` override → date-range `Exceptions` → `Mode` (`auto`/`on`/`off`) + weekly windows.
+**Precedence (highest → lowest):** sticky MQTT `RELAY` override → date-range
+`Exceptions` → `Mode` (`auto`/`on`/`off`) + weekly windows.
 
 | Function                | Description |
 |-------------------------|-------------|
-| `initSchedule()`        | Called from `setup()` (after WiFi/NTP are up). Loads persisted values from NVS, then attempts to fetch and apply the remote schedule. Prints the active schedule. |
-| `fetchSchedule()`       | Loads values from NVS first, then (if WiFi is connected) performs an HTTPS GET of the schedule manifest, matches the entry whose `Device` equals this MCU's MAC address, applies the `Mode`/windows/`Exceptions`, and persists them to NVS. On any failure it logs a `[SCHED]` message and keeps the NVS/default values. Also called every 10 min from `updateTick()`. |
-| `tick()`                | Called every `loop()`. Consumes the handshake flags (NTP re-sync, MQTT override, MQTT exception, local midnight rollover), fires the next scheduled transition when due, and re-arms the timeline. |
-| `desiredState()`        | Computes the relay state from the precedence chain above. |
-| `computeNextTransition()` | Scans up to 7 days for the next ON/OFF window edge and stores it as `nextTransitionTime`. |
-| `printNextTransition()` | Prints the "next transition in …" line after `Current State:` in the reading cycle. |
-| `loadFromNVS()` / `saveToNVS()` | Persist `Mode`, override, `daysMask`, windows, and exceptions to the `aircare` NVS namespace. |
-| `pruneExpiredExceptions()` / `evictOldestException()` | Self-cleaning: drop exceptions whose range has ended; round-robin evict the oldest if the list is full. |
+| `initSchedule()`        | Called from `setup()`; subscribes to the event bus, loads NVS, fetches/apply remote schedule. |
+| `fetchSchedule()`       | Loads NVS, then (if WiFi up) HTTPS-fetches the manifest by MAC, applies it, persists to NVS. Also called every 10 min. |
+| `tick()`                | Every `loop()`: handles day rollover (prunes expired exceptions), and fires the next transition at its edge. |
+| `desiredState()`        | Computes the relay state from the precedence chain. |
+| `computeNextTransition()` | Scans up to 7 days for the next ON/OFF edge. |
+| `printNextTransition()` | Prints the "next transition in …" line. |
+| `loadFromNVS()` / `saveToNVS()` | Persist `Mode`, override, `daysMask`, windows, exceptions. |
+| `pruneExpiredExceptions()` / `evictOldestException()` | Self-cleaning: drop ended exceptions; round-robin evict oldest if full. |
 
-**Schedule configuration file** — `bins/schedule.json` (served from the GitHub repo at `https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/schedule.json`):
+**Schedule configuration file** — `bins/schedule.json` (served from the repo at
+`scheduleURL`):
 
 ```json
 {
@@ -273,101 +374,110 @@ The relay's desired state is *evaluated* (never replayed), so NTP jumps or misse
 }
 ```
 
-- `Device` is the ESP32 MAC address (same format as in `update.json`).
-- `Mode` — `"auto"` (follow weekly windows), `"on"` (constant ON), or `"off"` (constant OFF).
-- `Auto.days` — 7-char Mon→Sun bitmask (`1` = schedule active that weekday). `"1111100"` = Mon–Fri.
-- `Auto.windows` — list of `["HH:MM","HH:MM"]` ON intervals for active days. **Arbitrary number** of windows/day; the lunch pause is simply the gap between two windows.
-- `Exceptions` *(optional)* — date-range overrides (holiday / vacation / onsite testing). `from`/`to` are inclusive `YYYY-MM-DD`; `state` is `"on"` or `"off"`. Up to 4 are kept; expired ones auto-drop at midnight and the oldest is evicted round-robin if still full.
-- **Legacy shim:** entries using the old `FilterOn`/`FilterOff`/`LunchStart`/`LunchEnd` `HHMM` fields are still accepted and converted to `auto` with two windows `[On..LunchStart]` + `[LunchEnd..Off]`.
-- The device always boots with the last successfully persisted values from NVS (or the compiled-in defaults on first boot), so the relay schedule keeps working even when the server is unreachable. Remote changes are applied within 10 minutes and persisted.
+- `Device` is the ESP32 MAC address.
+- `Mode` — `"auto"` (weekly windows), `"on"` (constant ON), or `"off"` (constant OFF).
+- `Auto.days` — 7-char Mon→Sun bitmask (`1` = active). `"1111100"` = Mon–Fri.
+- `Auto.windows` — list of `["HH:MM","HH:MM"]` ON intervals; arbitrary count.
+- `Exceptions` *(optional)* — date-range overrides; up to 4 kept, auto-expire at midnight, round-robin evict when full.
+- **Legacy shim:** entries using the old `FilterOn`/`FilterOff`/`LunchStart`/`LunchEnd` HHMM fields are still accepted and converted to `auto` with two windows.
+- The device always boots with the last persisted values (or defaults), so the
+  schedule survives reboots / server outages; remote changes apply within 10 min.
+
+---
+
+### `src/actuators/relay.*`
+**Relay GPIO driver** (hardware). The fan (relay 1) and UV (relay 2) are
+independent channels driven active-low.
+
+| Function            | Description |
+|---------------------|-------------|
+| `init()`            | Configures pins as outputs and forces both relays OFF out of reset. |
+| `set(Id/int, bool)` | Edge-triggered ON/OFF for one channel. |
+| `setBoth(bool)`     | Drives both channels (used by the scheduler). |
+| `state(Id/int)`     | Logical state of a channel. |
+| `bothOn()` / `anyOn()` | Combined state queries. |
+
+> The relay pins are forced HIGH (de-energized) in `init()` because the ESP32
+> powers up with pins LOW — without this the active-low modules would stay ON
+> until the first scheduler `rearm()`.
 
 ---
 
 ## Dependencies
 
-The project is built with **PlatformIO** (`platformio.ini`):
+Built with **PlatformIO** (`platformio.ini`):
 
-| Library                              | Version     | Purpose                     |
-|--------------------------------------|-------------|-----------------------------|
-| `espressif32`                        | 6.7.0       | ESP32 Arduino core          |
-| `Adafruit BME280 Library`            | ^2.2.2      | BME280 sensor driver        |
-| `PubSubClient`                       | ^2.8        | MQTT client                 |
-| `ArduinoJson`                        | ^7.0.4      | JSON serialisation          |
-| `ESP32-OTA-Pull`                     | latest      | OTA update mechanism        |
-| `TaskScheduler`                      | ^3.8.5      | Task scheduling (available) |
-| `WiFiManager`                        | ^2.0.17     | WiFi connection & portal    |
-| `OneButton`                          | ^2.5.0      | Button input handling       |
+| Library                       | Version     | Purpose                     |
+|-------------------------------|-------------|-----------------------------|
+| `espressif32`                 | 6.7.0       | ESP32 Arduino core          |
+| `Adafruit BME280 Library`     | ^2.2.2      | BME280 sensor driver        |
+| `PubSubClient`                | ^2.8        | MQTT client                 |
+| `ArduinoJson`                 | ^7.0.4      | JSON serialisation          |
+| `ESP32-OTA-Pull`              | (git)       | OTA update mechanism        |
+| `WiFiManager`                 | ^2.0.17     | WiFi connection & portal    |
+| `OneButton`                   | ^2.5.0      | Button input handling       |
+
+> `TaskScheduler` was removed from the build — scheduling is done with
+> `millis()` polling in `loop()` plus the event bus, not a timer library.
 
 ---
 
 ## Configuration
 
-Key parameters that can be adjusted in `globals.h`:
+Key compile-time parameters live in `core/board.h`:
 
 | Parameter            | Default     | Description                             |
 |----------------------|-------------|-----------------------------------------|
-| `CO2_LOW`            | 700 ppm     | Threshold below which CO₂ is “Green”    |
-| `CO2_HIGH`           | 800 ppm     | Threshold above which CO₂ is “Red”      |
+| `CO2_LOW`            | 700 ppm     | Threshold below which CO₂ is "Green"    |
+| `CO2_HIGH`           | 800 ppm     | Threshold above which CO₂ is "Red"      |
 | `measurementDelay`   | 60 000 ms   | Interval between measurement cycles     |
-| `updateDelay`        | 600 000 ms  | Interval between OTA update checks      |
+| `updateDelay`        | 600 000 ms  | Interval between OTA/update checks      |
 | `PORTAL_NAME`        | `"AIRCARE"` | SSID when in WiFi configuration mode    |
 | `PORTAL_TIMEOUT`     | 180 s       | Timeout for the configuration portal    |
 
-The MQTT broker address is currently hard‑coded to `52.23.110.164` in `mqttHelper.h`.
+- **MQTT broker** is *dynamic*: resolved from `bins/config.json` (matched by
+  MAC, or `Default`), persisted to NVS, with a compiled-in HiveMQ Cloud
+  fallback. It is no longer hard-coded.
+- **Remote manifest URLs** (`scheduleURL`, `updateURL`, `configURL`) are
+  centralised in `core/board.h` / `configHelper.cpp`.
+- `secrets.h` (MQTT credentials) is git-ignored; copy `secrets.h.example`.
 
 ---
 
 ## TODO / Proposed Improvements
 
-Brainstorm of improvements gathered from a code review (2026‑07‑15). Grouped by
-impact. Items in **Section A** have been implemented; B–D are pending.
+Brainstorm from a code review (2026‑07‑15), with current status.
 
-### A. Correctness bugs (DONE)
-
-1. **`co2_fu` reads the wrong register** — `src/app/app.cpp`. The variable means
-   *filtered‑uncompensated* but was reading `CO2_UNFILTERED_UNCOMPENSATED`. Now
-   reads `CO2_FILTERED_UNCOMPENSATED` (matching `co2_fc`/`uc`/`uu`).
-2. **No CO₂ validity / error check** — `getCO2_State()` and `printValues()`
-   trusted `co2_fc` unconditionally. Added `co2Valid()` (rejects `0` and
-   `>=10000`) plus a `readErrorStatus()` check; an invalid sample skips the
-   publish + LED update so a stale/zero reading never shows as "Green".
-3. **`rl2` telemetry duplicated `rl1`** — both reported `relay::state()`. The
-   two relays are now genuinely independent (`relay::state(1)` / `relay::state(2)`)
-   with per‑relay and combined helpers; telemetry publishes real `rl1`/`rl2`.
+### A. Correctness bugs — DONE
+1. `co2_fu` read the wrong register — fixed (`co2_fu` now reads
+   `CO2_FILTERED_UNCOMPENSATED`).
+2. No CO₂ validity/error check — added `co2Valid()` + `readErrorStatus()`;
+   invalid samples skip publish/LED.
+3. `rl2` telemetry duplicated `rl1` — relays are now independent
+   (`relay::state(1)` / `relay::state(2)`), real `rl1`/`rl2` published.
 
 ### B. Robustness / reliability
-
-4. **`serializedString[300]` can silently truncate** — `app.cpp`. **FIXED:**
-   buffer is now `512+1` and `serializeJson` is bounded to the buffer size with a
-   truncation warning; the MQTT queue slot (`Q_SLOT`) and `Q_CHUNK` were bumped to
-   match (3 samples/blob = 1539 B < 1984 B NVS cap).
-5. **`mqttPublish` persists to NVS on every dropped sample** — `mqttHelper.cpp`.
-   Each minute the link is down, `persistQueue()` rewrites NVS chunks; NVS has
-   finite write endurance (~10⁵). Persist every N samples or only on reconnect.
-6. **Hardcoded manifest URLs** — `schedule.cpp` / `otaHelper.cpp` used raw
-   `raw.githubusercontent.com/.../main/...` strings. **FIXED:** centralised into
-   `core/board.h` (`REMOTE_BASE_URL`, `scheduleURL`, `updateURL`); the scheduler
-   aliases `sched::scheduleURL` and OTA uses `updateURL`.
-7. **4 CO₂ I²C reads per cycle, only 1 used for logic** — `app.cpp`. Only `co2_fc`
-   drives decisions; the other three are telemetry‑only. Consider lazy‑reading
-   extras. `delay(100)` sits between BME and CO₂ reads with no I²C contention guard.
+4. `serializedString[300]` could truncate — **FIXED** (512+1, bounded
+   `serializeJson`, queue slots matched).
+5. `mqttPublish` persists to NVS on every dropped sample — *pending*. Persist
+   every N samples or only on reconnect (NVS write endurance ~10⁵).
+6. Hardcoded manifest URLs — **FIXED** (centralised in `core/board.h`).
+7. 4 CO₂ I²C reads per cycle, only 1 used for logic — *pending*. Consider
+   lazy-reading telemetry-only values; `delay(100)` sits between BME/CO₂ reads.
 
 ### C. Structure / maintainability
+8. Event bus is synchronous, no dedup/unsubscribe — *pending (optional)*. A
+   re-entrant `emit` could recurse; a queued model would be safer.
+9. `state2string()` re-derives state instead of using stored `co2_State` —
+   *pending*. Minor.
+10. Tests — **PARTIAL**. Native (`host`) tests exist for `relay` and
+    `co2check`. Scheduler logic (`desiredState`, `computeNextTransition`,
+    `exceptionActive`, `evaluateWindows`) is still untested.
 
-8. **Event bus is synchronous, no dedup/unsubscribe** — `core/events.cpp`. A
-   handler that re‑entrantly calls `emit` could recurse. A queued dispatch model
-   would be safer (optional).
-9. **`state2string()` re‑derives state** instead of using the stored `co2_State`
-   (`app.cpp`). Minor inconsistency.
-10. **`test/` is empty** — no automated tests. The scheduler logic
-    (`desiredState`, `computeNextTransition`, `exceptionActive`, `evaluateWindows`)
-    is pure and unit‑testable with PlatformIO `test`; a test would have caught A1.
-
-### D. Features / nice‑to‑haves
-
-11. **Periodic HEALTH telemetry** — free heap, RSSI trend, NTP sync age, sensor
-    error status, for fleet monitoring.
-12. **Remote‑configurable CO₂ thresholds** — `CO2_LOW`/`CO2_HIGH` are compile‑time;
-    expose via MQTT/NVS like the schedule.
-13. **`GET_CONFIG` command** — dump current schedule/override/exceptions back over
-    MQTT for remote verification.
+### D. Features / nice-to-haves
+11. Periodic HEALTH telemetry — **DONE** (`measurementTick()` publishes heap +
+    RSSI every 5 min).
+12. Remote-configurable CO₂ thresholds — *pending*. `CO2_LOW`/`CO2_HIGH` are
+    compile-time; expose via MQTT/NVS like the schedule.
+13. `GET_CONFIG` command — *pending*. Dump current schedule/override/exceptions
+    back over MQTT for remote verification.
