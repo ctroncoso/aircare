@@ -6,60 +6,114 @@ namespace mqtt
 {
     PubSubClient client(espClient); // defined here (single TU)
 
-    bool initMQTT()
+    // Print the exact parameters used for the broker connection so configuration
+    // mismatches (host/port/user) are visible in the serial log.
+    void logConnectionParams(const char *clientId)
     {
-        client.setCallback(callback);
-        client.setBufferSize(256);
-        client.setKeepAlive(15);
-        client.setServer(cfg::brokerHost, cfg::brokerPort);
-        if (!client.connected())
-        {
-            mqttreconnect();
-        }
-        return client.connected();
+        Serial.printf("[MQTT] host=%s port=%d user=%s clientId=%s tls=insecure\n",
+                      cfg::brokerHost, cfg::brokerPort, MQTT_USER, clientId);
     }
 
-    bool mqttreconnect()
+    // Prepare the secure client for a fresh connection. After a disconnect the
+    // WiFiClientSecure socket/TLS state can be left stale, which causes the next
+    // connect() to time out (rc=-1) instead of starting a new handshake. Always
+    // stop the client and re-apply setInsecure() before reconnecting.
+    void prepareSecureClient()
     {
-        u_int8_t attempts = 4;
-        while (!client.connected())
+        espClient.stop();
+        espClient.setInsecure();
+    }
+
+    // Exponential backoff state for the periodic reconnect in loop(). HiveMQ
+    // Cloud rate-limits connection attempts; hammering it right after a reset
+    // (or after an abrupt disconnect) makes the broker stop answering the TLS
+    // handshake (rc=-1/-4). We therefore make a single attempt at boot and
+    // back off with jitter in the loop so retries spread out over time.
+    static uint8_t g_backoffStep = 0;
+    static const unsigned long BACKOFF_BASE_MS = 30000;   // 30 s
+    static const unsigned long BACKOFF_MAX_MS  = 600000;  // 10 min cap
+
+    unsigned long mqttBackoffInterval()
+    {
+        // 30s, 60s, 120s, 240s, 480s, 600s(cap) ... with +/-25% jitter.
+        unsigned long raw = BACKOFF_BASE_MS * (1UL << min(g_backoffStep, (uint8_t)4));
+        if (raw > BACKOFF_MAX_MS) raw = BACKOFF_MAX_MS;
+        long jitter = (long)(raw * 0.25 * ((float)random(0, 100) / 100.0 - 0.5) * 2);
+        unsigned long interval = raw + jitter;
+        return interval;
+    }
+
+    void mqttResetBackoff()
+    {
+        g_backoffStep = 0;
+    }
+
+    bool initMQTT()
+    {
+        // The broker (HiveMQ Cloud) requires TLS on port 8883. Configure the
+        // secure client before binding PubSubClient. setInsecure() disables
+        // certificate verification — consistent with the HTTPS config fetch in
+        // httpFetch.cpp. For production, replace with setCACert() + the
+        // broker's root CA.
+        prepareSecureClient();
+
+        client.setCallback(callback);
+        // Must be large enough for the /cleanair/sensor telemetry packet
+        // (topic + ~300-byte serializedString + MQTT header). 256 was too
+        // small, causing publish() to silently drop measurements.
+        client.setBufferSize(512);
+        client.setKeepAlive(15);
+        client.setServer(cfg::brokerHost, cfg::brokerPort);
+
+        // Retry at boot with exponential backoff so the startup events aren't
+        // lost. HiveMQ Cloud throttles rapid reconnects, so we space attempts
+        // out instead of hammering. Bounded so we don't block forever — if it
+        // still fails we continue without MQTT.
+        const uint8_t BOOT_MAX_ATTEMPTS = 5;
+        for (uint8_t attempt = 1; attempt <= BOOT_MAX_ATTEMPTS && !client.connected(); attempt++)
         {
-            Serial.print("Attempting MQTT connection...");
             String clientId = "aircare-";
             clientId += WiFi.macAddress();
+            Serial.printf("Attempting MQTT connection (boot %d/%d)...", attempt, BOOT_MAX_ATTEMPTS);
+            logConnectionParams(clientId.c_str());
+            prepareSecureClient();
             client.setServer(cfg::brokerHost, cfg::brokerPort);
             if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
             {
                 Serial.println("connected");
-            }
-            else
-            {
-                Serial.printf("failed, rc=%d, attempts left =%d\n", client.state(), attempts);
-                delay(5000);
-                attempts--;
-            }
-            if (attempts == 0)
-            {
-                Serial.println("MQTT: max reconnect attempts reached. Continuing without MQTT.");
                 break;
             }
+            Serial.printf("failed, rc=%d\n", client.state());
+            if (attempt < BOOT_MAX_ATTEMPTS)
+            {
+                unsigned long wait = mqttBackoffInterval();
+                mqttResetBackoff();  // keep each boot wait at the base interval
+                Serial.printf("MQTT: boot retry in %lu ms\n", wait);
+                delay(wait);
+            }
         }
+        mqttResetBackoff();
         return client.connected();
     }
 
     bool mqttTryReconnect()
     {
         String clientId = "aircare-" + WiFi.macAddress();
+        logConnectionParams(clientId.c_str());
+        prepareSecureClient();
         client.setServer(cfg::brokerHost, cfg::brokerPort);
         if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
         {
             Serial.println("MQTT: reconnected.");
+            mqttResetBackoff();
             client.subscribe("AirCare/inCommands/broadcast");
             client.subscribe(String("AirCare/inCommands/" + WiFi.macAddress()).c_str());
         }
         else
         {
-            Serial.printf("MQTT: reconnect attempt failed, rc=%d\n", client.state());
+            g_backoffStep++;
+            Serial.printf("MQTT: reconnect attempt failed, rc=%d (next in %lu ms)\n",
+                          client.state(), mqttBackoffInterval());
         }
         return client.connected();
     }

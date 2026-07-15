@@ -84,7 +84,7 @@ void measurementTick()
         readValues();
         co2_State = getCO2_State(sunriseH::co2_fc);
         printValues();
-        mqtt::mqttPublish("/cleanair/sensor", serializedString);
+        mqtt::mqttPublish("cleanair/sensor", serializedString);
         leds::setLedOnCO2Condition(co2_State);
     }
 }

@@ -163,11 +163,12 @@ void loop()
   updateTick(); // check for updates and install.
 
   //-------------MQTT
-  // Attempt a single reconnect every 30 s if the broker is not reachable.
-  // mqttTryReconnect() does not block, so the loop stays responsive.
+  // If the broker is not reachable, retry with exponential backoff (30s, 60s,
+  // 120s ... up to 10 min, with jitter) so we don't hammer HiveMQ Cloud's
+  // connection-rate limit after a reset or abrupt disconnect.
   if (!mqtt::client.connected()) {
     unsigned long currentTime = millis();
-    if (currentTime - previousTimer_mqtt >= ONE_MIN / 2) {  // 30 s
+    if (currentTime - previousTimer_mqtt >= mqtt::mqttBackoffInterval()) {
       previousTimer_mqtt = currentTime;
       mqtt::mqttTryReconnect();
     }
