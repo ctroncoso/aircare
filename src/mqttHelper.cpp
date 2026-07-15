@@ -1,6 +1,7 @@
 // mqttHelper.cpp — MQTT broker connect/publish/subscribe implementation.
 #include "mqttHelper.h"
 #include "secrets.h"  // MQTT_USER / MQTT_PASS (gitignored, private)
+#include "core/nvsStore.h"  // nvs::putBytes/getBytes — persist buffered telemetry across reboot
 
 namespace mqtt
 {
@@ -40,6 +41,144 @@ namespace mqtt
     // PINGREQ keepalive) is not called. A shorter value risks the broker
     // closing the connection before loop() resumes pumping keepalives.
     static const uint16_t MQTT_KEEPALIVE_S = 30;
+
+    // ------------------------------------------------------------------------
+    // Telemetry buffer for dropped-connection resilience.
+    //
+    // When the broker link is down, measurementTick() keeps producing one
+    // sample per minute. Instead of dropping them (the old behaviour), we
+    // enqueue them in a bounded RAM ring and mirror the most recent N to NVS
+    // so a *reboot* during the outage doesn't lose them either. On the next
+    // successful (re)connect the queue is drained back to "cleanair/sensor".
+    //
+    // NVS constraints drive the design:
+    //   - the nvs partition is only 20 KB and is shared with WiFiManager,
+    //     config and schedule, so we cap persisted samples at Q_PERSIST_MAX;
+    //   - a single NVS blob is capped at ~1984 bytes, so we write the queue
+    //     as fixed-size chunks of Q_CHUNK samples (Q_CHUNK*Q_SLOT < 1984).
+    // ------------------------------------------------------------------------
+    static const size_t  Q_SLOT        = 300;   // matches app.cpp serializedString[300]
+    static const int     Q_CAP         = 64;    // RAM ring capacity (~1 h @ 1/min, ~19 KB)
+    static const int     Q_PERSIST_MAX = 30;    // max samples mirrored to NVS (~30 min)
+    static const int     Q_CHUNK       = 6;     // samples per NVS blob (6*300 = 1800 < 1984)
+
+    static char   g_queue[Q_CAP][Q_SLOT];
+    static int    g_qHead  = 0;   // index of oldest sample
+    static int    g_qCount = 0;   // number of buffered samples
+    static bool   g_wasConnected = false; // edge detection for (re)connect -> flush
+
+    static void qPush(const char *s)
+    {
+        if (g_qCount >= Q_CAP)        // full: drop oldest, keep freshest
+        {
+            g_qHead = (g_qHead + 1) % Q_CAP;
+            g_qCount--;
+        }
+        int tail = (g_qHead + g_qCount) % Q_CAP;
+        strncpy(g_queue[tail], s, Q_SLOT - 1);
+        g_queue[tail][Q_SLOT - 1] = '\0';
+        g_qCount++;
+    }
+
+    static bool qPop(char *out)
+    {
+        if (g_qCount == 0) return false;
+        strncpy(out, g_queue[g_qHead], Q_SLOT - 1);
+        out[Q_SLOT - 1] = '\0';
+        g_qHead = (g_qHead + 1) % Q_CAP;
+        g_qCount--;
+        return true;
+    }
+
+    // Write the most recent Q_PERSIST_MAX samples to NVS as chunked blobs.
+    static void persistQueue()
+    {
+        nvs::withWrite("mqttq", [](Preferences &p)
+        {
+            int n = g_qCount;
+            if (n > Q_PERSIST_MAX) n = Q_PERSIST_MAX;
+            int start = (g_qHead + g_qCount - n) % Q_CAP;
+            p.putInt("cnt", n);
+            int chunk = 0, written = 0;
+            while (written < n)
+            {
+                int inChunk = min(Q_CHUNK, n - written);
+                char blob[Q_CHUNK * Q_SLOT];
+                for (int i = 0; i < inChunk; i++)
+                {
+                    int idx = (start + written + i) % Q_CAP;
+                    memcpy(blob + i * Q_SLOT, g_queue[idx], Q_SLOT);
+                }
+                p.putBytes(("c" + String(chunk)).c_str(), blob, (size_t)inChunk * Q_SLOT);
+                written += inChunk;
+                chunk++;
+            }
+            p.putInt("chunks", chunk);
+        });
+    }
+
+    // Load any persisted queue from NVS back into the RAM ring (called at boot).
+    static void loadPersisted()
+    {
+        nvs::withRead("mqttq", [](Preferences &p)
+        {
+            int n = p.getInt("cnt", 0);
+            int chunks = p.getInt("chunks", 0);
+            if (n <= 0 || chunks <= 0) return;
+            int read = 0;
+            for (int c = 0; c < chunks && read < n; c++)
+            {
+                int inChunk = min(Q_CHUNK, n - read);
+                char blob[Q_CHUNK * Q_SLOT];
+                size_t got = p.getBytes(("c" + String(c)).c_str(), blob, (size_t)inChunk * Q_SLOT);
+                if (got == 0) break;
+                for (int i = 0; i < inChunk; i++) qPush(blob + i * Q_SLOT);
+                read += inChunk;
+            }
+            if (g_qCount > 0)
+                Serial.printf("MQTT: recovered %d samples from NVS\n", g_qCount);
+        });
+    }
+
+    // Remove the persisted queue from NVS (called once fully flushed/replaced).
+    static void clearPersisted()
+    {
+        nvs::withWrite("mqttq", [](Preferences &p)
+        {
+            int chunks = p.getInt("chunks", 0);
+            for (int c = 0; c < chunks; c++) p.remove(("c" + String(c)).c_str());
+            p.remove("cnt");
+            p.remove("chunks");
+        });
+    }
+
+    // Drain the RAM queue to the broker. Stops and re-buffers if the link drops
+    // mid-flush. Emits a RECOVERED event so the gap is visible server-side.
+    static void mqttFlushQueue()
+    {
+        if (g_qCount == 0) return;
+        char buf[Q_SLOT];
+        int flushed = 0;
+        while (qPop(buf))
+        {
+            if (!client.connected())   // link dropped again — push this one back
+            {
+                qPush(buf);
+                break;
+            }
+            client.publish("cleanair/sensor", buf);
+            client.loop();             // pump keepalive between sends
+            delay(10);                 // tiny yield so a large flush won't starve the watchdog
+            flushed++;
+        }
+        if (flushed > 0)
+        {
+            Serial.printf("MQTT: flushed %d buffered sample(s)\n", flushed);
+            publishEvent(INFO, "MQTT|RECOVERED|" + String(flushed));
+        }
+        if (g_qCount == 0) clearPersisted();
+        else persistQueue();           // still have unflushed (link dropped) — keep persisted
+    }
 
     unsigned long mqttBackoffInterval()
     {
@@ -101,6 +240,8 @@ namespace mqtt
             }
         }
         mqttResetBackoff();
+        loadPersisted();   // pull any queue saved before a reboot during outage
+        g_wasConnected = client.connected();
         return client.connected();
     }
 
@@ -133,13 +274,15 @@ namespace mqtt
     void mqttLoop()
     {
         client.loop(); // keepalive + inbound
-        if (!client.connected())
+        bool connected = client.connected();
+        if (!connected)
         {
             unsigned long now = millis();
             if (now - g_lastReconnectAttempt >= RUNTIME_RECONNECT_MS)
             {
                 g_lastReconnectAttempt = now;
                 mqttTryReconnect();
+                connected = client.connected();
             }
         }
         else
@@ -147,6 +290,9 @@ namespace mqtt
             g_lastReconnectAttempt = 0; // next drop retries immediately
             mqttResetBackoff();         // clear any boot backoff state
         }
+        // Edge: false -> true == a (re)connect just happened -> drain the buffer.
+        if (connected && !g_wasConnected) mqttFlushQueue();
+        g_wasConnected = connected;
     }
 
     // Pump the MQTT client without attempting reconnects — used during blocking
@@ -157,14 +303,27 @@ namespace mqtt
         client.loop();
     }
 
+    // Publishes to the broker. If the link is down, telemetry destined for the
+    // sensor topic is buffered (RAM + NVS) and replayed on the next reconnect;
+    // all other topics (events, etc.) are dropped while disconnected — events
+    // are "now"-oriented and replaying a stale one later is just noise.
     void mqttPublish(const char *mq_path, const char *content)
     {
-        if (!client.connected())
+        if (client.connected())
         {
-            Serial.println("MQTT: skipping publish, not connected.");
+            client.publish(mq_path, content);
             return;
         }
-        client.publish(mq_path, content);
+        if (strcmp(mq_path, "cleanair/sensor") == 0)
+        {
+            qPush(content);
+            persistQueue();
+            Serial.printf("MQTT: link down — buffered sample (%d pending)\n", g_qCount);
+        }
+        else
+        {
+            Serial.println("MQTT: skipping publish, not connected.");
+        }
     }
 
     void publishEvent(pub_event event, String param)
