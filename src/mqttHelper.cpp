@@ -372,11 +372,12 @@ namespace mqtt
     {
         // Local buffer: events no longer share the telemetry buffer
         // (app.cpp's serializedString), removing cross-module coupling.
-        static char eventBuf[300];
+        static char eventBuf[512];
         JsonDocument doc;
         doc["event"] = event;
         doc["param"] = param;
         doc["mac"] = WiFi.macAddress();
+        doc["label"] = cfg::label();
         doc["fw"] = PROGRAM_VERSION;
         serializeJson(doc, eventBuf);
         mqtt::mqttPublish("cleanair/events", eventBuf);
@@ -387,11 +388,12 @@ namespace mqtt
     // is visible whether the command arrived via broadcast or the MAC topic.
     void publishReport()
     {
-        static char reportBuf[300];
+        static char reportBuf[512];
         JsonDocument doc;
         doc["event"] = INFO;
         doc["param"] = "REPORT|STATUS|Device status report";
         doc["mac"] = WiFi.macAddress();
+        doc["label"] = cfg::label();
         doc["fw"] = PROGRAM_VERSION;
 
         // Local time as YYYY-MM-DD HH:MM:SS (Chile TZ via ntp).

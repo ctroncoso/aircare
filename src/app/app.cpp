@@ -50,6 +50,7 @@ void printValues()
     doc["time"] = ntp::getTime();
     doc["uptime"] = millis();
     doc["mac"] = WiFi.macAddress();
+    doc["label"] = cfg::label();
     doc["rl1"] = int(relay::state(1));
     doc["rl2"] = int(relay::state(2));
     doc["sched_mode"] = sched::modeToString(sched::mode);

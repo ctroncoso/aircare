@@ -14,9 +14,9 @@
         "name": "mac",
         "type": "query",
         "datasource": "InfluxDB",
-        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"aircare\", tag: \"mac\")",
+        "query": "from(bucket: \"aircare\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"sensor\" and r._field == \"co2_fc\")\n  |> last()\n  |> keep(columns: [\"mac\", \"label\"])\n  |> group()\n  |> map(fn: (r) => ({ _value: r.mac, text: if exists r.label and r.label != \"\" then r.label else r.mac }))\n  |> unique(column: \"_value\")",
         "refresh": 2,
-        "sort": 1,
+        "sort": 5,
         "current": { "text": "all", "value": "$__all" },
         "includeAll": true,
         "multi": false
