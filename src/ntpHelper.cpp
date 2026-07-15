@@ -16,7 +16,15 @@ namespace ntp
 
     bool timeSynced()
     {
-        return sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+        // SNTP_SYNC_STATUS_COMPLETED is only reported momentarily right after a
+        // successful sync, then the status reverts to RESET/IN_PROGRESS even
+        // though the system clock stays valid. Gating time-dependent logic on
+        // that transient flag makes it read false almost always (e.g. rearm()
+        // would never apply the relay). Instead, treat time as synced once the
+        // clock has advanced past a sane epoch (2023-01-01). Once SNTP has set
+        // the clock at least once, this stays true for the rest of the uptime.
+        time_t now = time(nullptr);
+        return now > 1672531200; // 2023-01-01T00:00:00Z
     }
 
     void initNTP()
