@@ -1,6 +1,6 @@
 # AirCare — Indoor Air Quality Monitor
 
-**Version:** 1.1.13 | **Board:** ESP32 Dev Module | **Framework:** Arduino
+**Version:** 1.1.14 | **Board:** ESP32 Dev Module | **Framework:** Arduino
 
 AirCare is an IoT firmware for the ESP32 microcontroller that monitors indoor air quality using two main sensors:
 
