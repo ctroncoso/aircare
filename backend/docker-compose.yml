@@ -1,0 +1,80 @@
+# Backend stack for AirCare (ESP32 air-quality sensors)
+#
+# Components (all on the home server, accessed via Tailscale):
+#   - InfluxDB 2.x  : time-series store for sensor telemetry
+#   - Node-RED      : MQTT client (HiveMQ Cloud) -> InfluxDB glue + control UI
+#   - Grafana       : dashboards reading InfluxDB
+#
+# The MCUs keep publishing to HiveMQ Cloud (unchanged). Node-RED is the only
+# component that talks to HiveMQ Cloud (subscribe + publish commands).
+#
+# Run:
+#   cp .env.example .env   # then edit with your secrets
+#   docker compose up -d
+#
+# First boot creates the InfluxDB org/bucket/token from .env.
+# Node-RED auto-installs the dashboard + InfluxDB palette nodes on first start.
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: aircare-influxdb
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    ports:
+      # Bind to the Tailscale interface only if you want to restrict access;
+      # otherwise reachable via the Tailscale tunnel like everything else.
+      - "8086:8086"
+
+  nodered:
+    image: nodered/node-red:4.1.11-debian
+    container_name: aircare-nodered
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - nodered-data:/data
+      # Pre-installs node-red-dashboard + InfluxDB node on first boot.
+      - ./nodered/package.json:/data/package.json:ro
+      # Device list (MAC dropdown in the control UI) — read-only.
+      - ../bins/config.json:/data/config.json:ro
+    ports:
+      - "1880:1880"
+    depends_on:
+      - influxdb
+
+  grafana:
+    image: grafana/grafana:11.6.16
+    container_name: aircare-grafana
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # Pass through so the provisioned datasource can read them.
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - influxdb
+
+volumes:
+  influxdb-data:
+  influxdb-config:
+  nodered-data:
+  grafana-data:

@@ -1,0 +1,10 @@
+{
+  "name": "aircare-nodered",
+  "description": "AirCare backend flows",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "node-red-dashboard": "^3.6.5",
+    "node-red-contrib-influxdb": "^0.7.0"
+  }
+}
