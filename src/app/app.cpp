@@ -99,6 +99,18 @@ void updateTick()
         mqtt::mqttPump();       // keep keepalive alive across the blocking HTTP calls below
         ota::checkUpdate();
         mqtt::mqttPump();
+
+        // The OTA install above sets ota::g_updating and runs exclusively. If an
+        // update was just applied it has already rebooted; if it is still in
+        // progress (or just finished this cycle), skip the other blocking
+        // fetches so the OTA write is never interleaved with another long HTTPS
+        // GET or a broker swap — that keeps the remote-update path safe.
+        if (ota::g_updating)
+        {
+            Serial.println("[APP] OTA in progress — skipping schedule/config fetch this cycle.");
+            return;
+        }
+
         sched::fetchSchedule(); // re-fetch schedule (falls back to NVS on failure)
         mqtt::mqttPump();
         cfg::fetchConfig();     // re-fetch broker config (emits Evt::BrokerChanged on change)

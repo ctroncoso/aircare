@@ -108,10 +108,11 @@ void setup()
     mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
     mqtt::publishEvent(INFO, "SNTP|TIME_SET|SNTP server connected. DateTime updated.");
     mqtt::publishEvent(INFO, "UPDT|NOTFound|Update checked. None found.");
-    mqtt::client.subscribe("AirCare/inCommands/broadcast");
-    mqtt::client.subscribe(String("AirCare/inCommands/"+WiFi.macAddress()).c_str());
-    mqtt::publishEvent(INFO, "MQTT_SUSCRIBE|AirCare/inCommands/broadcast|MQTT suscribed to broadcast.");
-    mqtt::publishEvent(INFO, "MQTT_SUSCRIBE|AirCare/inCommands/"+WiFi.macAddress()+"|MQTT suscribed to own mac.");
+    // Subscribe to the command channels and confirm on the events channel so it
+    // is verifiable the device is listening for remote commands (RELAY,
+    // EXCEPTION, REBOOT, UPDATE). Uses the same helper as the runtime
+    // reconnect path so the two can't drift apart.
+    mqtt::subscribeCommands();
 
     leds::blinkLed(ledPinY, 2);
     delay(1000);

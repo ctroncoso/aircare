@@ -13,6 +13,11 @@ namespace mqtt
 
     bool initMQTT();
     bool mqttTryReconnect();
+    // Subscribe to the inbound command topics (broadcast + this device's MAC)
+    // and publish a confirmation to the events channel so it is verifiable that
+    // the device is actually listening for remote commands. Call this on every
+    // (re)connect — both the boot path and the runtime reconnect path.
+    void subscribeCommands();
     void mqttLoop();
     void mqttPump();
     // Returns the current backoff interval (ms) for the periodic reconnect,

@@ -2,6 +2,10 @@
 #include "mqttHelper.h"
 #include "secrets.h"  // MQTT_USER / MQTT_PASS (gitignored, private)
 #include "core/nvsStore.h"  // nvs::putBytes/getBytes — persist buffered telemetry across reboot
+#include "otaHelper.h"  // ota::checkUpdate() — used by the UPDATE command
+#include "ntpHelper.h"  // ntp::getTime() / ntp::getTM() — local time for the report
+#include "actuators/relay.h"  // relay::state() — relay status for the report
+#include <cctype>      // toupper() — normalize command casing
 
 namespace mqtt
 {
@@ -19,20 +23,25 @@ namespace mqtt
     // WiFiClientSecure socket/TLS state can be left stale, which causes the next
     // connect() to time out (rc=-1) instead of starting a new handshake. Always
     // stop the client and re-apply setInsecure() before reconnecting.
+    // SNI (required by HiveMQ Cloud) is set automatically by WiFiClientSecure
+    // because we pass the broker HOSTNAME (never a raw IP) to setServer() below.
     void prepareSecureClient()
     {
         espClient.stop();
         espClient.setInsecure();
     }
 
-    // Exponential backoff state for the periodic reconnect in loop(). HiveMQ
-    // Cloud rate-limits connection attempts; hammering it right after a reset
-    // (or after an abrupt disconnect) makes the broker stop answering the TLS
-    // handshake (rc=-1/-4). We therefore make a single attempt at boot and
-    // back off with jitter in the loop so retries spread out over time.
+    // Exponential backoff state for the periodic reconnect in loop() and at
+    // boot. HiveMQ Cloud rate-limits connection attempts; hammering it right
+    // after a reset (or after an abrupt disconnect) makes the broker stop
+    // answering the TLS handshake (rc=-1/-4). We therefore start at 1s and
+    // back off exponentially (1s, 2s, 4s, ... up to 30s cap) with jitter, so
+    // retries spread out instead of hammering. SNI (also required by HiveMQ
+    // Cloud) is handled automatically because we always pass the broker
+    // HOSTNAME (never a raw IP) to setServer().
     static uint8_t g_backoffStep = 0;
-    static const unsigned long BACKOFF_BASE_MS = 30000;   // 30 s
-    static const unsigned long BACKOFF_MAX_MS  = 600000;  // 10 min cap
+    static const unsigned long BACKOFF_BASE_MS = 1000;    // 1 s — start small, grow exponentially
+    static const unsigned long BACKOFF_MAX_MS  = 30000;   // 30 s cap
 
     // MQTT keepalive period (seconds). 30s gives the broker a 45s grace window
     // before it may drop an idle socket — comfortably covering the blocking
@@ -182,8 +191,11 @@ namespace mqtt
 
     unsigned long mqttBackoffInterval()
     {
-        // 30s, 60s, 120s, 240s, 480s, 600s(cap) ... with +/-25% jitter.
-        unsigned long raw = BACKOFF_BASE_MS * (1UL << min(g_backoffStep, (uint8_t)4));
+        // 1s, 2s, 4s, 8s, 16s, 30s(cap) ... with +/-25% jitter. Matches the
+        // HiveMQ guidance: start small and back off exponentially so we neither
+        // hammer the broker (which makes it stop answering the TLS handshake,
+        // rc=-1/-4) nor wait needlessly long when the link is only briefly down.
+        unsigned long raw = BACKOFF_BASE_MS * (1UL << min(g_backoffStep, (uint8_t)5));
         if (raw > BACKOFF_MAX_MS) raw = BACKOFF_MAX_MS;
         long jitter = (long)(raw * 0.25 * ((float)random(0, 100) / 100.0 - 0.5) * 2);
         unsigned long interval = raw + jitter;
@@ -234,7 +246,7 @@ namespace mqtt
             if (attempt < BOOT_MAX_ATTEMPTS)
             {
                 unsigned long wait = mqttBackoffInterval();
-                mqttResetBackoff();  // keep each boot wait at the base interval
+                g_backoffStep++;   // grow the backoff for the next boot attempt
                 Serial.printf("MQTT: boot retry in %lu ms\n", wait);
                 delay(wait);
             }
@@ -243,6 +255,27 @@ namespace mqtt
         loadPersisted();   // pull any queue saved before a reboot during outage
         g_wasConnected = client.connected();
         return client.connected();
+    }
+
+    // Subscribe to the inbound command topics and confirm on the events channel
+    // so it is verifiable (from the server side) that the device is actually
+    // listening for remote commands. Called on every (re)connect.
+    void subscribeCommands()
+    {
+        String broadcast = "AirCare/inCommands/broadcast";
+        String own       = String("AirCare/inCommands/") + WiFi.macAddress();
+        bool ok = client.subscribe(broadcast.c_str()) &&
+                  client.subscribe(own.c_str());
+        if (ok)
+        {
+            Serial.printf("MQTT: subscribed to %s and %s\n", broadcast.c_str(), own.c_str());
+            publishEvent(INFO, "MQTT_SUB|OK|Subscribed to command channels");
+        }
+        else
+        {
+            Serial.printf("MQTT: subscribe failed (rc=%d)\n", client.state());
+            publishEvent(ERROR, "MQTT_SUB|FAIL|Command channel subscribe failed");
+        }
     }
 
     bool mqttTryReconnect()
@@ -254,8 +287,7 @@ namespace mqtt
         if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
         {
             Serial.println("MQTT: reconnected.");
-            client.subscribe("AirCare/inCommands/broadcast");
-            client.subscribe(String("AirCare/inCommands/" + WiFi.macAddress()).c_str());
+            subscribeCommands();
         }
         else
         {
@@ -266,11 +298,15 @@ namespace mqtt
 
     // Single entry point called every loop(): pumps the MQTT client (sends
     // keepalive PINGREQs and processes inbound messages) and, if the link has
-    // dropped, attempts one reconnect on a fixed cadence. A dedicated thread is
-    // unnecessary and unsafe here — PubSubClient is not thread-safe — so we keep
-    // everything on the main loop, which is the standard ESP32 MQTT pattern.
+    // dropped, attempts one reconnect with exponential backoff. A dedicated
+    // thread is unnecessary and unsafe here — PubSubClient is not thread-safe —
+    // so we keep everything on the main loop, which is the standard ESP32 MQTT
+    // pattern. The backoff (1s -> 30s cap) follows the HiveMQ guidance so we
+    // don't hammer the broker after an abrupt disconnect (which makes it stop
+    // answering the TLS handshake, rc=-1/-4) yet recover quickly when the link
+    // is only briefly down.
     static unsigned long g_lastReconnectAttempt = 0;
-    static const unsigned long RUNTIME_RECONNECT_MS = 15000; // 15 s
+    static unsigned long g_reconnectDelay = BACKOFF_BASE_MS; // grows on repeated failures
     void mqttLoop()
     {
         client.loop(); // keepalive + inbound
@@ -278,16 +314,22 @@ namespace mqtt
         if (!connected)
         {
             unsigned long now = millis();
-            if (now - g_lastReconnectAttempt >= RUNTIME_RECONNECT_MS)
+            if (now - g_lastReconnectAttempt >= g_reconnectDelay)
             {
                 g_lastReconnectAttempt = now;
                 mqttTryReconnect();
                 connected = client.connected();
+                if (!connected)
+                {
+                    g_backoffStep++;
+                    g_reconnectDelay = mqttBackoffInterval();
+                }
             }
         }
         else
         {
-            g_lastReconnectAttempt = 0; // next drop retries immediately
+            g_lastReconnectAttempt = 0; // next drop retries after the base delay
+            g_reconnectDelay = BACKOFF_BASE_MS;
             mqttResetBackoff();         // clear any boot backoff state
         }
         // Edge: false -> true == a (re)connect just happened -> drain the buffer.
@@ -340,6 +382,48 @@ namespace mqtt
         mqtt::mqttPublish("cleanair/events", eventBuf);
     }
 
+    // Respond to a "report" command with a status snapshot: MAC, local time,
+    // WiFi RSSI, uptime, and relay state. Published to the events channel so it
+    // is visible whether the command arrived via broadcast or the MAC topic.
+    void publishReport()
+    {
+        static char reportBuf[300];
+        JsonDocument doc;
+        doc["event"] = INFO;
+        doc["param"] = "REPORT|STATUS|Device status report";
+        doc["mac"] = WiFi.macAddress();
+        doc["fw"] = PROGRAM_VERSION;
+
+        // Local time as YYYY-MM-DD HH:MM:SS (Chile TZ via ntp).
+        struct tm dt = ntp::getTM();
+        char timeStr[32];
+        strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &dt);
+        doc["local_time"] = timeStr;
+
+        doc["rssi"] = WiFi.RSSI();                 // dBm (negative; higher = better)
+        doc["uptime_ms"] = millis();
+        doc["relay"] = relay::state() ? "ON" : "OFF";
+
+        serializeJson(doc, reportBuf);
+        mqtt::mqttPublish("cleanair/events", reportBuf);
+        Serial.printf("MQTT: report -> %s\n", reportBuf);
+    }
+
+    // Case-insensitive command compare so "report", "REPORT", "Report" all
+    // match. MQTT payloads are often typed in lowercase by clients/tools.
+    bool cmdEquals(const char *a, const char *b)
+    {
+        if (a == nullptr || b == nullptr) return false;
+        while (*a && *b)
+        {
+            if (toupper((unsigned char)*a) != toupper((unsigned char)*b))
+                return false;
+            a++;
+            b++;
+        }
+        return *a == *b; // both hit NUL at the same time
+    }
+
     void callback(char *topic, byte *payload, unsigned int length)
     {
         Serial.print("Message arrived [");
@@ -360,22 +444,22 @@ namespace mqtt
         }
 
         const char *cmd = doc["cmd"] | "";
-        if (strcmp(cmd, "RELAY") == 0)
+        if (cmdEquals(cmd, "RELAY"))
         {
             const char *value = doc["value"] | "";
-            if (strcmp(value, "ON") == 0)
+            if (cmdEquals(value, "ON"))
             {
                 bool on = true;
                 events::emit(Evt::RelayOverride, &on);
                 publishEvent(INFO, "RELAY|OVERRIDE_ON|Manual override ON via MQTT");
             }
-            else if (strcmp(value, "OFF") == 0)
+            else if (cmdEquals(value, "OFF"))
             {
                 bool on = false;
                 events::emit(Evt::RelayOverride, &on);
                 publishEvent(INFO, "RELAY|OVERRIDE_OFF|Manual override OFF via MQTT");
             }
-            else if (strcmp(value, "AUTO") == 0)
+            else if (cmdEquals(value, "AUTO"))
             {
                 events::emit(Evt::RelayAuto);
                 publishEvent(INFO, "RELAY|AUTO|Override cleared, back to schedule");
@@ -385,7 +469,7 @@ namespace mqtt
                 Serial.printf("MQTT: unknown RELAY value '%s'\n", value);
             }
         }
-        else if (strcmp(cmd, "EXCEPTION") == 0)
+        else if (cmdEquals(cmd, "EXCEPTION"))
         {
             const char *from = doc["from"] | "";
             const char *to = doc["to"] | "";
@@ -393,7 +477,7 @@ namespace mqtt
             uint32_t fd = 0, td = 0;
             if (sched::parseDate(from, fd) && sched::parseDate(to, td))
             {
-                ExceptionReq req{fd, td, (strcmp(st, "on") == 0)};
+                ExceptionReq req{fd, td, (cmdEquals(st, "on"))};
                 events::emit(Evt::ExceptionSet, &req);
                 publishEvent(INFO, String("EXCEPTION|SET|") + st + " " + from + ".." + to);
             }
@@ -402,10 +486,36 @@ namespace mqtt
                 Serial.printf("MQTT: bad EXCEPTION dates '%s'..'%s'\n", from, to);
             }
         }
-        else if (strcmp(cmd, "EXCEPTION_CLEAR") == 0)
+        else if (cmdEquals(cmd, "EXCEPTION_CLEAR"))
         {
             events::emit(Evt::ExceptionClear);
             publishEvent(INFO, "EXCEPTION|CLEAR|All exceptions cleared via MQTT");
+        }
+        else if (cmdEquals(cmd, "REBOOT"))
+        {
+            // Remote reboot so a flashed-but-not-applied image (or any stuck
+            // state) can be recovered without physical access. Ack first, then
+            // restart. mqttPump() ensures the PUBLISH leaves before reset.
+            publishEvent(INFO, "MCU|RESTART|Restart requested via MQTT");
+            mqttPump();
+            leds::blinkLed(ledPinG, 3, false);
+            delay(1000);
+            ESP.restart();
+        }
+        else if (cmdEquals(cmd, "UPDATE") || cmdEquals(cmd, "UPDATE_NOW"))
+        {
+            // Force an immediate OTA check/install. checkUpdate() reboots on
+            // success, so a pending remote update can be applied on demand.
+            publishEvent(INFO, "UPDT|FORCED|Update check requested via MQTT");
+            mqttPump();
+            ota::checkUpdate();
+        }
+        else if (cmdEquals(cmd, "REPORT"))
+        {
+            // Status snapshot (MAC, local time, RSSI, uptime, relay). Works on
+            // both the broadcast and the per-device MAC topic, so a broadcast
+            // "report" makes every unit answer with its own status.
+            publishReport();
         }
         else
         {

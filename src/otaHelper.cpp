@@ -1,8 +1,11 @@
 // otaHelper.cpp — OTA firmware update check implementation.
 #include "otaHelper.h"
+#include "mqttHelper.h"  // publishEvent / client.connected() — guarded, see below
 
 namespace ota
 {
+    bool g_updating = false;
+
     void callback(int offset, int totallength)
     {
         Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
@@ -37,29 +40,55 @@ namespace ota
         return "Unknown error";
     }
 
+    // Reboot the device, flushing serial and (if connected) an event first.
+    // checkUpdate() may be called from setup() before MQTT is up, so the
+    // publish is guarded by client.connected().
+    void doReboot(const char *reason)
+    {
+        if (mqtt::client.connected())
+        {
+            mqtt::publishEvent(INFO, String("MCU|RESTART|") + reason);
+            // Pump once so the PUBLISH actually goes out before we reset.
+            mqtt::mqttPump();
+        }
+        leds::blinkLed(ledPinG, 3, false);
+        delay(2000);
+        ESP.restart();
+    }
+
     bool checkUpdate()
     {
+        // Mark the OTA window so updateTick() skips the (also blocking) schedule
+        // and config fetches this cycle — the OTA write must run exclusively.
+        g_updating = true;
+
         ESP32OTAPull ota;
         ota.SetCallback(callback);
         Serial.println("Checking update");
-        int ret;
-        ret = ota.AllowDowngrades(true)
-                  .CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json",
-                                     PROGRAM_VERSION, ESP32OTAPull::DONT_DO_UPDATE);
-        if (ret == ESP32OTAPull::UPDATE_AVAILABLE)
-        {
-            Serial.println("Clearing leds");
-            leds::clearLeds();
-            leds::blinkLed(ledPinR, 4, false);
-            leds::blinkLed(ledPinG, 4, false);
-            leds::blinkLed(ledPinY, 4, false);
-            delay(2000);
-            Serial.println("Update found. Downloading & installing.");
-            ret = ota.AllowDowngrades(true)
+
+        // Single fetch + install. The library reports availability vs. installed
+        // in one pass, so we no longer do a separate DONT_DO_UPDATE probe (that
+        // introduced a TOCTOU where update.json could change between calls).
+        int ret = ota.AllowDowngrades(true)
                       .CheckForOTAUpdate("https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/update.json",
                                          PROGRAM_VERSION);
-        }
+
+        bool installed = (ret == ESP32OTAPull::UPDATE_OK ||
+                          ret == ESP32OTAPull::UPDATE_AVAILABLE);
+
         Serial.printf("CheckOTAForUpdate returned %d (%s)\n\n", ret, errtext(ret));
+
+        if (installed)
+        {
+            // The new image is now on the inactive OTA partition and marked
+            // bootable. Without an explicit restart the device would keep
+            // running the OLD firmware forever — the remote update would
+            // silently never take effect. Reboot to apply it.
+            doReboot("Update installed, applying new firmware");
+            // does not return
+        }
+
+        g_updating = false;
         return false;
     }
 }

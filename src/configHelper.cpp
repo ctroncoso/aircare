@@ -38,13 +38,32 @@ namespace cfg
         Serial.println("[CFG] No NVS broker found, using compiled fallback.");
     }
 
+    // Reject obviously invalid broker endpoints so a bad/malformed config.json
+    // push can never point the device at an unreachable broker and permanently
+    // sever the remote channel (no commands, no OTA, no reboot). On invalid
+    // input we keep the last-good NVS/fallback values and report "no change".
+    bool brokerValid(const char *b, int p)
+    {
+        if (b == nullptr || strlen(b) == 0) return false;
+        if (strcmp(b, "0.0.0.0") == 0) return false;
+        if (strcmp(b, "0") == 0) return false;
+        if (p <= 0 || p > 65535) return false;
+        return true;
+    }
+
     bool applyEntry(JsonObject entry)
     {
         const char *b = entry["Broker"] | "";
         int         p = entry["Port"]   | FALLBACK_PORT;
 
+        if (!brokerValid(b, p))
+        {
+            Serial.printf("[CFG] Ignoring invalid broker entry '%s':%d — keeping current.\n", b, p);
+            return false;
+        }
+
         bool changed = false;
-        if (strlen(b) > 0 && strcmp(b, brokerHost) != 0)
+        if (strcmp(b, brokerHost) != 0)
         {
             strncpy(brokerHost, b, sizeof(brokerHost) - 1);
             brokerHost[sizeof(brokerHost) - 1] = '\0';
