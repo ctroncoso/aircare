@@ -162,37 +162,6 @@
             }
         }
 
-        // --- Explicit ESP32 reset into ROM download mode (mirrors pio/esptool) ---
-        // RTS -> EN (active-low via transistor), DTR -> GPIO0 (active-low via transistor)
-        // This is the exact DTR/RTS pulse sequence PlatformIO/esptool uses before upload.
-        async function enterDownloadMode(port) {
-            if (!port.readable) {
-                await port.open({ baudRate: 115200 });
-            }
-            // Step 1: idle (EN high, GPIO0 high)
-            await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-            await new Promise(r => setTimeout(r, 100));
-            // Step 2: assert reset (EN low), GPIO0 released
-            await port.setSignals({ dataTerminalReady: false, requestToSend: true });
-            await new Promise(r => setTimeout(r, 100));
-            // Step 3: also pull GPIO0 low (strapping pin) while reset still asserted
-            await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-            await new Promise(r => setTimeout(r, 100));
-            // Step 4: release reset (EN high) while GPIO0 still low -> boots into ROM download mode
-            await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-            await new Promise(r => setTimeout(r, 100));
-            // Step 5: release GPIO0
-            await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-            await new Promise(r => setTimeout(r, 50));
-
-            // Close the port so the esptool Transport can re-open it cleanly below
-            // (calling port.open() twice without a close throws "port is already open").
-            // The chip remains in ROM download mode waiting for the sync command.
-            if (port.readable) {
-                await port.close();
-            }
-        }
-
         // --- BUTTON 1: Flash & Then Monitor ---
         flashBtn.addEventListener('click', async () => {
             logDiv.innerText = '';
@@ -204,11 +173,9 @@
             try {
                 log("🔌 Por favor, selecione su conección al ESP32 de la ventana emergente...");
                 port = await navigator.serial.requestPort();
-                // resetOnConnect = false: we perform the bootloader reset explicitly below
-                transport = new Transport(port, false);
-
-                log("⚡ Forzando reinicio del MCU al modo bootloader (igual que pio)...");
-                await enterDownloadMode(port);
+                // resetOnConnect = true: esptool-js performs the same DTR/RTS reset pulse
+                // that PlatformIO/esptool.py uses before upload (RTS->EN, DTR->GPIO0).
+                transport = new Transport(port, true);
 
                 log("📥 Downloading firmware.bin from server...");
                 const response = await fetch(FIRMWARE_URL);
