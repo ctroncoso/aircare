@@ -184,6 +184,13 @@
             // Step 5: release GPIO0
             await port.setSignals({ dataTerminalReady: false, requestToSend: false });
             await new Promise(r => setTimeout(r, 50));
+
+            // Close the port so the esptool Transport can re-open it cleanly below
+            // (calling port.open() twice without a close throws "port is already open").
+            // The chip remains in ROM download mode waiting for the sync command.
+            if (port.readable) {
+                await port.close();
+            }
         }
 
         // --- BUTTON 1: Flash & Then Monitor ---
