@@ -33,6 +33,14 @@ namespace mqtt
     static const unsigned long BACKOFF_BASE_MS = 30000;   // 30 s
     static const unsigned long BACKOFF_MAX_MS  = 600000;  // 10 min cap
 
+    // MQTT keepalive period (seconds). 30s gives the broker a 45s grace window
+    // before it may drop an idle socket — comfortably covering the blocking
+    // sensor init in setup() (~10s) and the periodic HTTP fetches in
+    // updateTick() (~5-15s), during which client.loop() (which sends the
+    // PINGREQ keepalive) is not called. A shorter value risks the broker
+    // closing the connection before loop() resumes pumping keepalives.
+    static const uint16_t MQTT_KEEPALIVE_S = 30;
+
     unsigned long mqttBackoffInterval()
     {
         // 30s, 60s, 120s, 240s, 480s, 600s(cap) ... with +/-25% jitter.
@@ -62,7 +70,7 @@ namespace mqtt
         // (topic + ~300-byte serializedString + MQTT header). 256 was too
         // small, causing publish() to silently drop measurements.
         client.setBufferSize(512);
-        client.setKeepAlive(15);
+        client.setKeepAlive(MQTT_KEEPALIVE_S);
         client.setServer(cfg::brokerHost, cfg::brokerPort);
 
         // Retry at boot with exponential backoff so the startup events aren't
@@ -105,17 +113,48 @@ namespace mqtt
         if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
         {
             Serial.println("MQTT: reconnected.");
-            mqttResetBackoff();
             client.subscribe("AirCare/inCommands/broadcast");
             client.subscribe(String("AirCare/inCommands/" + WiFi.macAddress()).c_str());
         }
         else
         {
-            g_backoffStep++;
-            Serial.printf("MQTT: reconnect attempt failed, rc=%d (next in %lu ms)\n",
-                          client.state(), mqttBackoffInterval());
+            Serial.printf("MQTT: reconnect attempt failed, rc=%d\n", client.state());
         }
         return client.connected();
+    }
+
+    // Single entry point called every loop(): pumps the MQTT client (sends
+    // keepalive PINGREQs and processes inbound messages) and, if the link has
+    // dropped, attempts one reconnect on a fixed cadence. A dedicated thread is
+    // unnecessary and unsafe here — PubSubClient is not thread-safe — so we keep
+    // everything on the main loop, which is the standard ESP32 MQTT pattern.
+    static unsigned long g_lastReconnectAttempt = 0;
+    static const unsigned long RUNTIME_RECONNECT_MS = 15000; // 15 s
+    void mqttLoop()
+    {
+        client.loop(); // keepalive + inbound
+        if (!client.connected())
+        {
+            unsigned long now = millis();
+            if (now - g_lastReconnectAttempt >= RUNTIME_RECONNECT_MS)
+            {
+                g_lastReconnectAttempt = now;
+                mqttTryReconnect();
+            }
+        }
+        else
+        {
+            g_lastReconnectAttempt = 0; // next drop retries immediately
+            mqttResetBackoff();         // clear any boot backoff state
+        }
+    }
+
+    // Pump the MQTT client without attempting reconnects — used during blocking
+    // waits in setup() (sensor init, HTTP fetches) so the keepalive PINGREQ is
+    // sent and the broker doesn't drop the idle socket. Does NOT call connect().
+    void mqttPump()
+    {
+        client.loop();
     }
 
     void mqttPublish(const char *mq_path, const char *content)

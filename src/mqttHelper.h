@@ -13,6 +13,8 @@ namespace mqtt
 
     bool initMQTT();
     bool mqttTryReconnect();
+    void mqttLoop();
+    void mqttPump();
     // Returns the current backoff interval (ms) for the periodic reconnect,
     // growing exponentially with each failed attempt and capped. Call
     // mqttResetBackoff() after a successful connect.

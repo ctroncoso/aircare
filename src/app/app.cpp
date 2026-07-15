@@ -1,5 +1,6 @@
 // app.cpp — application-level measurement / update cycles and telemetry.
 #include "app/app.h"
+#include "mqttHelper.h"  // mqtt::mqttPump() — keep keepalive alive during blocking HTTP fetches
 
 // Shared telemetry buffer (was globals.h doc / serializedString).
 JsonDocument doc;
@@ -95,8 +96,12 @@ void updateTick()
     if (currentTime - previousTimer_2 >= updateDelay)
     {
         previousTimer_2 = currentTime;
+        mqtt::mqttPump();       // keep keepalive alive across the blocking HTTP calls below
         ota::checkUpdate();
+        mqtt::mqttPump();
         sched::fetchSchedule(); // re-fetch schedule (falls back to NVS on failure)
+        mqtt::mqttPump();
         cfg::fetchConfig();     // re-fetch broker config (emits Evt::BrokerChanged on change)
+        mqtt::mqttPump();
     }
 }

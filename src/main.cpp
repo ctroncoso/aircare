@@ -130,23 +130,24 @@ void setup()
   {
     Serial.println("Sensor Sunrise no responde.");
     mqtt::publishEvent(ERROR, "CO2_SENSOR|I2C_COMM_SUNRISE|CO2 sensor not responding");
-    delay(180000);
-    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
+    // Keep the MQTT keepalive alive during the long pre-restart wait so the
+    // error event is delivered and the broker doesn't drop the socket.
+    for (int i = 0; i < 36; i++) { mqtt::mqttPump(); delay(5000); }
+    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU");
     delay(10000);
     ESP.restart();
-  } 
+  }
 
 
-  
   // Connect and initialize Temp/Presure/Humidity sensor
   if (!bme::initBME())
   {
-    mqtt::publishEvent(ERROR, "BME280|I2C_COMM_BME280|BME280 sensor not responding"); 
-    delay(180000);
-    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU"); 
+    mqtt::publishEvent(ERROR, "BME280|I2C_COMM_BME280|BME280 sensor not responding");
+    for (int i = 0; i < 36; i++) { mqtt::mqttPump(); delay(5000); }
+    mqtt::publishEvent(INFO, "MCU|RESTART|Restarting MCU");
     delay(10000);
     ESP.restart();
-  }   
+  }
   
   
   mqtt::publishEvent(INFO, "SETUP|OK|Setup finished successfully.");
@@ -163,17 +164,11 @@ void loop()
   updateTick(); // check for updates and install.
 
   //-------------MQTT
-  // If the broker is not reachable, retry with exponential backoff (30s, 60s,
-  // 120s ... up to 10 min, with jitter) so we don't hammer HiveMQ Cloud's
-  // connection-rate limit after a reset or abrupt disconnect.
-  if (!mqtt::client.connected()) {
-    unsigned long currentTime = millis();
-    if (currentTime - previousTimer_mqtt >= mqtt::mqttBackoffInterval()) {
-      previousTimer_mqtt = currentTime;
-      mqtt::mqttTryReconnect();
-    }
-  }
-  mqtt::client.loop();
+  // mqttLoop() pumps the keepalive (PINGREQ) and inbound messages every cycle,
+  // and reconnects on a fixed 15s cadence if the link drops. No separate thread
+  // is used — PubSubClient is not thread-safe; the main loop is the standard
+  // ESP32 MQTT pattern.
+  mqtt::mqttLoop();
   //-----------------
 }
 
