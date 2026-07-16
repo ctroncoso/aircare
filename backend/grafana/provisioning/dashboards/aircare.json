@@ -50,7 +50,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ]
     },
@@ -65,7 +65,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ]
     },
@@ -80,7 +80,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"temp\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"temp\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ]
     },
@@ -95,7 +95,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ]
     },
@@ -110,7 +110,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ]
     },
@@ -133,7 +133,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"rl1\" or r._field == \"rl2\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"rl1\" or r._field == \"rl2\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
         }
       ]
     },
@@ -148,7 +148,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> keep(columns: [\"_time\", \"label\", \"mac\", \"event\", \"param\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 100)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> keep(columns: [\"_time\", \"label\", \"mac\", \"event\", \"param\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 100)"
         }
       ]
     },
@@ -163,7 +163,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"sched_mode\" or r._field == \"sched_ovr\" or r._field == \"sched_exc\")\n  |> filter(fn: (r) => r.label == \"${device}\" or \"${device}\" == \"$__all\")\n  |> last()\n  |> pivot(rowKey: [\"label\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"label\", \"sched_mode\", \"sched_ovr\", \"sched_exc\"])"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"sched_mode\" or r._field == \"sched_ovr\" or r._field == \"sched_exc\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> last()\n  |> pivot(rowKey: [\"label\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"label\", \"sched_mode\", \"sched_ovr\", \"sched_exc\"])"
         }
       ]
     }
