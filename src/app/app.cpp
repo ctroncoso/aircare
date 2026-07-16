@@ -11,9 +11,8 @@
 JsonDocument doc;
 char serializedString[512 + 1];
 
-// Periodic timers (were globals.h previousTimer_1 / previousTimer_2).
-static unsigned long previousTimer_1 = 0;
-static unsigned long previousTimer_2 = 0;
+// Periodic timers (previousTimer_1 / previousTimer_2) live in globals.h so
+// setup() can initialize them to millis() and defer the first fetch.
 
 void readValues()
 {

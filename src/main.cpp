@@ -13,7 +13,6 @@
 #include "configHelper.h"   // dynamic MQTT broker (cfg::)
 #include "actuators/relay.h"
 #include "core/events.h"
-#include "esp_task_wdt.h"
 
 #include "ESP32OTAPull.h"
 
@@ -171,21 +170,11 @@ void setup()
   
   mqtt::publishEvent(INFO, "SETUP|OK|Setup finished successfully.");
 
-  // Task Watchdog on the Arduino loop task: if loop() ever fails to complete
-  // within 30s (wedged HTTPS fetch, deadlocked timer, spin-loop), the chip
-  // reboots itself. Enabled LAST so the intentionally-blocking pre-restart
-  // waits above (sensor-init failures) — which already end in ESP.restart() —
-  // never trip it. loop() runs frequently enough that healthy operation keeps
-  // the watchdog fed automatically.
-  if (esp_task_wdt_init(30, true) == ESP_OK) // 30s timeout, panic+reboot on trip
-  {
-    esp_task_wdt_add(NULL); // NULL == current (loop) task
-    Serial.println("[WDT] Task watchdog armed (30s).");
-  }
-  else
-  {
-    Serial.println("[WDT] WARNING: task watchdog init failed.");
-  }
+  // Defer the first updateTick() so it does not fire on the very first loop()
+  // call (previousTimer_2 starts at 0). This avoids a redundant second
+  // ota::checkUpdate() immediately after the one run during setup(), and
+  // spreads the first periodic fetch to updateDelay after boot.
+  previousTimer_2 = millis();
 }
 
 void loop()

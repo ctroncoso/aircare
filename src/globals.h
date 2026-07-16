@@ -23,3 +23,6 @@ inline WiFiClientSecure espClient;
 inline WiFiManager wm;
 
 inline unsigned long previousTimer_mqtt = 0; // gate for periodic MQTT reconnect attempts
+
+inline unsigned long previousTimer_1 = 0;     // measurement cadence gate (app.cpp)
+inline unsigned long previousTimer_2 = 0;     // update/fetch cadence gate (app.cpp)
