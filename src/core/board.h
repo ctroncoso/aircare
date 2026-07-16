@@ -6,7 +6,7 @@
 
 // ---- build / version ----
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION "1.1.14"
+#define PROGRAM_VERSION "1.1.13"
 // #define DEBUG
 #define CO2_LOW (700)
 #define CO2_HIGH (800)
@@ -30,7 +30,7 @@ inline const int rlPin2 = 33;
 // across schedule.cpp and otaHelper.cpp.
 #define REMOTE_BASE_URL "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins"
 inline const char *scheduleURL = REMOTE_BASE_URL "/schedule.json";
-inline const char *updateURL   = REMOTE_BASE_URL "/update.json";
+inline const char *updateURL = REMOTE_BASE_URL "/update.json";
 
 // ---- CO2 condition state machine ----
 enum class CO2_Condition
