@@ -88,7 +88,15 @@
           "datasource": "InfluxDB",
           "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
-      ]
+      ],
+      "options": {
+        "connectNullValues": {
+          "mode": "threshold",
+          "line": "5m",
+          "span": "5m"
+        }
+      },
+      "nullPointMode": "null"
     },
     {
       "id": 2,
@@ -113,7 +121,15 @@
           "datasource": "InfluxDB",
           "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> map(fn: (r) => ({ _time: r._time, _value: r._value, series: r.label + \" \" + (if r._field == \"co2_fc\" then \"Filtered\" else if r._field == \"co2_uc\" then \"Uncompensated\" else if r._field == \"co2_fu\" then \"Forced\" else \"Unforced\") }))\n  |> group(columns: [\"series\"])"
         }
-      ]
+      ],
+      "options": {
+        "connectNullValues": {
+          "mode": "threshold",
+          "line": "5m",
+          "span": "5m"
+        }
+      },
+      "nullPointMode": "null"
     },
     {
       "id": 3,
@@ -138,7 +154,15 @@
           "datasource": "InfluxDB",
           "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"temp\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
-      ]
+      ],
+      "options": {
+        "connectNullValues": {
+          "mode": "threshold",
+          "line": "5m",
+          "span": "5m"
+        }
+      },
+      "nullPointMode": "null"
     },
     {
       "id": 4,
@@ -163,7 +187,15 @@
           "datasource": "InfluxDB",
           "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
-      ]
+      ],
+      "options": {
+        "connectNullValues": {
+          "mode": "threshold",
+          "line": "5m",
+          "span": "5m"
+        }
+      },
+      "nullPointMode": "null"
     },
     {
       "id": 5,
@@ -188,7 +220,15 @@
           "datasource": "InfluxDB",
           "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
-      ]
+      ],
+      "options": {
+        "connectNullValues": {
+          "mode": "threshold",
+          "line": "5m",
+          "span": "5m"
+        }
+      },
+      "nullPointMode": "null"
     },
     {
       "id": 6,
@@ -239,8 +279,14 @@
           "showLegend": true,
           "sort": "asc",
           "sortDesc": false
+        },
+        "connectNullValues": {
+          "mode": "threshold",
+          "line": "5m",
+          "span": "5m"
         }
-      }
+      },
+      "nullPointMode": "null"
     },
     {
       "id": 7,
