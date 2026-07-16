@@ -132,22 +132,16 @@ void measurementTick()
         mqtt::mqttPublish("cleanair/sensor", serializedString);
         leds::setLedOnCO2Condition(co2_State);
 
-        // ---- D11: periodic health telemetry (every 5 measurement cycles) ----
-        static unsigned long health_last_publish = 0;
-        const unsigned long health_interval = 5 * measurementDelay; // 5 min
-        if (millis() - health_last_publish >= health_interval)
+        // ---- periodic status/health heartbeat (every 5 measurement cycles) ----
+        // Replaces the old standalone HEALTH message: the status snapshot
+        // (config/state + health) is the liveness signal and is also what the
+        // on-demand REPORT command publishes.
+        static unsigned long status_last_publish = 0;
+        const unsigned long status_interval = 5 * measurementDelay; // ~5 min
+        if (millis() - status_last_publish >= status_interval)
         {
-            health_last_publish = millis();
-            // Build a tiny health snapshot.
-            static char healthBuf[300];
-            JsonDocument doc;
-            doc["event"] = INFO;
-            doc["param"] = "HEALTH|heap=" + String(ESP.getFreeHeap()) + "|rssi=" + String(WiFi.RSSI()) + "|uptime=" + String(millis());
-            doc["mac"] = WiFi.macAddress();
-            doc["label"] = cfg::label();
-            doc["fw"] = PROGRAM_VERSION;
-            serializeJson(doc, healthBuf);
-            mqtt::mqttPublish("cleanair/events", healthBuf);
+            status_last_publish = millis();
+            mqtt::publishStatus("STATUS|Device status report");
         }
     }
 }

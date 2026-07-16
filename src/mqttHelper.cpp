@@ -383,15 +383,17 @@ namespace mqtt
         mqtt::mqttPublish("cleanair/events", eventBuf);
     }
 
-    // Respond to a "report" command with a status snapshot: MAC, local time,
-    // WiFi RSSI, uptime, and relay state. Published to the events channel so it
-    // is visible whether the command arrived via broadcast or the MAC topic.
-    void publishReport()
+    // Publish a status snapshot (config/state + health) to cleanair/status.
+    // Covers both the periodic health heartbeat and the on-demand REPORT
+    // command. Carries MAC/label/fw, the health snapshot (local time, RSSI,
+    // uptime, free heap) and the live schedule/exception/relay state. Kept off
+    // the sensor measurement so telemetry stays pure measurements.
+    void publishStatus(const char *param)
     {
-        static char reportBuf[512];
+        static char statusBuf[512];
         JsonDocument doc;
         doc["event"] = INFO;
-        doc["param"] = "REPORT|STATUS|Device status report";
+        doc["param"] = param;
         doc["mac"] = WiFi.macAddress();
         doc["label"] = cfg::label();
         doc["fw"] = PROGRAM_VERSION;
@@ -404,12 +406,15 @@ namespace mqtt
 
         doc["rssi"] = WiFi.RSSI();                 // dBm (negative; higher = better)
         doc["uptime_ms"] = millis();
+        doc["heap"] = ESP.getFreeHeap();           // free heap in bytes (health)
         doc["relay"] = relay::state(1) ? "ON" : "OFF";   // fan channel (relay 1)
         doc["relay2"] = relay::state(2) ? "ON" : "OFF";  // UV channel (relay 2)
         doc["relay_both"] = relay::bothOn() ? "ON" : "OFF";
 
-        // Mirror the upcoming-exception view published in sensor telemetry so a
-        // manual REPORT also surfaces the next (up to 2) exceptions.
+        // Schedule mode/override plus the next (up to 2) upcoming exceptions.
+        doc["sched_mode"] = sched::modeToString(sched::mode);
+        doc["sched_ovr"]  = sched::overrideToString(sched::override);
+        doc["sched_exc"]  = sched::excCount;
         sched::ExceptionView excView[sched::MAX_EXC_PUBLISH];
         int excViewCount = 0;
         sched::getExceptionList(excView, &excViewCount);
@@ -426,9 +431,9 @@ namespace mqtt
             doc["exc2_state"] = excView[1].on ? "ON" : "OFF";
         }
 
-        serializeJson(doc, reportBuf);
-        mqtt::mqttPublish("cleanair/events", reportBuf);
-        Serial.printf("MQTT: report -> %s\n", reportBuf);
+        serializeJson(doc, statusBuf);
+        mqtt::mqttPublish("cleanair/status", statusBuf);
+        Serial.printf("MQTT: status -> %s\n", statusBuf);
     }
 
     // Case-insensitive command compare so "report", "REPORT", "Report" all
@@ -534,10 +539,10 @@ namespace mqtt
         }
         else if (cmdEquals(cmd, "REPORT"))
         {
-            // Status snapshot (MAC, local time, RSSI, uptime, relay). Works on
-            // both the broadcast and the per-device MAC topic, so a broadcast
-            // "report" makes every unit answer with its own status.
-            publishReport();
+            // Status snapshot (on-demand). Works on both the broadcast and the
+            // per-device MAC topic, so a broadcast "report" makes every unit
+            // answer with its own status on cleanair/status.
+            publishStatus("REPORT|STATUS|Device status report");
         }
         else
         {

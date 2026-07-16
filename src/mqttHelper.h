@@ -27,5 +27,8 @@ namespace mqtt
     void mqttResetBackoff();
     void mqttPublish(const char *path, const char *content);
     void publishEvent(pub_event event, String param);
+    // Publish a status snapshot (config/state + health) to cleanair/status.
+    // Periodic health heartbeat and the on-demand REPORT command both use it.
+    void publishStatus(const char *param);
     void callback(char *topic, byte *payload, unsigned int length);
 }
