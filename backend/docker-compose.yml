@@ -74,6 +74,8 @@ services:
       - TZ=${TZ}
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # Allow the custom web UI (and Node-RED) to embed Grafana panels/iframe.
+      - GF_ALLOW_EMBEDDING=true
       # Pass through so the provisioned datasource can read them.
       - INFLUXDB_ORG=${INFLUXDB_ORG}
       - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
@@ -85,6 +87,32 @@ services:
       - "3001:3000"
     depends_on:
       - influxdb
+
+  # Custom web UI (Option B): static SPA that connects to HiveMQ Cloud over
+  # MQTT-WebSocket and embeds the Grafana dashboard. Node-RED's dashboard
+  # (:1880/ui) is kept as a fallback control surface.
+  webui:
+    image: nginx:1.27-alpine
+    container_name: aircare-webui
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - MQTT_BROKER=${MQTT_BROKER}
+      - MQTT_WS_PORT=8884
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASS=${MQTT_PASS}
+      - GRAFANA_BASE=http://grafana:3000
+      - GRAFANA_DASHBOARD_UID=aircare-main
+    volumes:
+      - ./webui:/usr/share/nginx/html:ro
+      - ./webui/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../bins/config.json:/usr/share/nginx/html/config.json:ro
+    # entrypoint templates config.js from the env vars above at container start.
+    command: ["/usr/share/nginx/html/entrypoint.sh"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - grafana
 
 volumes:
   influxdb-data:

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AirCare Control</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>AirCare</h1>
+    <div id="conn" class="conn offline">disconnected</div>
+  </header>
+
+  <main>
+    <section class="panel control">
+      <h2>Control</h2>
+
+      <label class="field">
+        <span>Device</span>
+        <select id="device"></select>
+      </label>
+
+      <label class="field inline">
+        <input type="checkbox" id="broadcast" />
+        <span>Broadcast to all devices</span>
+      </label>
+
+      <div class="group">
+        <h3>Relay</h3>
+        <div class="btn-row">
+          <button data-cmd="RELAY" data-val="ON">ON</button>
+          <button data-cmd="RELAY" data-val="OFF">OFF</button>
+          <button data-cmd="RELAY" data-val="AUTO">AUTO</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Schedule exception</h3>
+        <label class="field">
+          <span>From</span>
+          <input type="datetime-local" id="exc_from" />
+        </label>
+        <label class="field">
+          <span>To</span>
+          <input type="datetime-local" id="exc_to" />
+        </label>
+        <label class="field inline">
+          <input type="checkbox" id="exc_state" />
+          <span>Relay ON during exception</span>
+        </label>
+        <div class="btn-row">
+          <button data-cmd="EXCEPTION">SET</button>
+          <button data-cmd="EXCEPTION_CLEAR">CLEAR</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Device</h3>
+        <div class="btn-row">
+          <button data-cmd="REPORT">REPORT</button>
+          <button data-cmd="UPDATE">UPDATE</button>
+          <button data-cmd="REBOOT">REBOOT</button>
+        </div>
+      </div>
+
+      <p id="status" class="status"></p>
+    </section>
+
+    <section class="panel dash">
+      <h2>Dashboard</h2>
+      <iframe id="grafana" title="AirCare dashboard" loading="lazy"></iframe>
+      <p class="hint">
+        Node-RED control UI remains available as a fallback at
+        <a href="http://localhost:1880/ui" target="_blank" rel="noopener">:1880/ui</a>.
+      </p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
