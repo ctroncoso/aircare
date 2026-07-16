@@ -100,7 +100,7 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: if r._field == \"co2_fc\" then \"Filtered\" else if r._field == \"co2_uc\" then \"Uncompensated\" else if r._field == \"co2_fu\" then \"Forced\" else \"Unforced\" }))\n  |> group(columns: [\"label\", \"_field\"])"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ _time: r._time, _value: r._value, series: r.label + \" \" + (if r._field == \"co2_fc\" then \"Filtered\" else if r._field == \"co2_uc\" then \"Uncompensated\" else if r._field == \"co2_fu\" then \"Forced\" else \"Unforced\") }))\n  |> group(columns: [\"series\"])"
         }
       ]
     },
