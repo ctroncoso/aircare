@@ -5,12 +5,12 @@
     "Label": "AirCare device"
   },
   "Devices": [
-    { "Device": "A8:42:E3:AB:10:88", "Label": "AirCare A8:10:88", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
-    { "Device": "A8:42:E3:AB:6F:40", "Label": "AirCare A8:6F:40", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
-    { "Device": "C8:F0:9E:9E:C6:6C", "Label": "AirCare C8:C6:6C", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
-    { "Device": "A8:42:E3:AB:1E:04", "Label": "AirCare A8:1E:04", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
-    { "Device": "A0:A3:B3:96:EF:F0", "Label": "AirCare A0:EF:F0", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
-    { "Device": "A8:42:E3:AB:70:BC", "Label": "AirCare A8:70:BC", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
-    { "Device": "C8:F0:9E:9E:38:40", "Label": "AirCare Test Board", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 }
+    { "Device": "A8:42:E3:AB:10:88", "Label": "Jardin-NT", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
+    { "Device": "A8:42:E3:AB:6F:40", "Label": "Jardin-NM", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
+    { "Device": "C8:F0:9E:9E:C6:6C", "Label": "Eden-2B", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
+    { "Device": "A8:42:E3:AB:1E:04", "Label": "Eden-3A", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
+    { "Device": "A0:A3:B3:96:EF:F0", "Label": "Eden-2A", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
+    { "Device": "A8:42:E3:AB:70:BC", "Label": "Eden-1A", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 },
+    { "Device": "C8:F0:9E:9E:38:40", "Label": "Eden-K", "Broker": "4532efaca6c5432ea63dbae9a7690ef4.s1.eu.hivemq.cloud", "Port": 8883 }
   ]
 }
