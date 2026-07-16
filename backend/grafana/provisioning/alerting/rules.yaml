@@ -16,7 +16,7 @@ groups:
           severity: critical
           system: aircare
         annotations:
-          summary: "CO2 at or above 800 ppm on device {{ $labels.mac }}"
+          summary: "CO2 at or above 800 ppm on device {{ $labels.label }} ({{ $labels.mac }})"
           description: "co2_fc reached {{ $values.B }} ppm (red band). Ventilation may be needed."
         data:
           - refId: A
@@ -33,7 +33,7 @@ groups:
                 from(bucket: "aircare")
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "sensor" and r._field == "co2_fc")
-                  |> group(columns: ["mac"])
+                  |> group(columns: ["label", "mac"])
                   |> last()
           - refId: B
             datasourceUid: __expr__
