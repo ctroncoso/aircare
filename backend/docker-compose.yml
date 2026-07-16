@@ -20,6 +20,19 @@ services:
     image: influxdb:2.7
     container_name: aircare-influxdb
     restart: unless-stopped
+    # Ensure InfluxDB is not starved of I/O/CPU by other containers on the
+    # host (e.g. a separate crawl4ai container) when several sensors report
+    # at once, which previously caused write timeouts (500) and dropped points.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+        reservations:
+          cpus: "0.50"
+          memory: 512m
+    mem_limit: 1g
+    cpus: 2.0
     environment:
       - TZ=${TZ}
       - DOCKER_INFLUXDB_INIT_MODE=setup
