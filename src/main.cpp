@@ -177,6 +177,7 @@ void loop()
 
 
   button.tick();
+  ntp::resyncIfStale();   // force a fresh NTP sync if poll mode has gone quiet
   measurementTick();
   sched::tick();   // event-driven relay scheduler: fire transitions at their edges
   updateTick(); // check for updates and install.
