@@ -318,6 +318,40 @@ namespace sched
         Serial.println("[SCHED] Evicted oldest exception (round-robin).");
     }
 
+    void getExceptionList(ExceptionView out[MAX_EXC_PUBLISH], int *count)
+    {
+        *count = 0;
+        if (excCount <= 0)
+            return;
+
+        // Local copy so we can sort without disturbing the live array order.
+        ExceptionView tmp[MAX_EXCEPTIONS];
+        for (int i = 0; i < excCount && i < MAX_EXCEPTIONS; i++)
+        {
+            tmp[i].fromDay = exceptions[i].fromDay;
+            tmp[i].toDay  = exceptions[i].toDay;
+            tmp[i].on     = exceptions[i].on;
+        }
+
+        // Simple insertion sort by fromDay ascending (few elements).
+        for (int i = 1; i < excCount; i++)
+        {
+            ExceptionView key = tmp[i];
+            int j = i - 1;
+            while (j >= 0 && tmp[j].fromDay > key.fromDay)
+            {
+                tmp[j + 1] = tmp[j];
+                j--;
+            }
+            tmp[j + 1] = key;
+        }
+
+        int n = (excCount < MAX_EXC_PUBLISH) ? excCount : MAX_EXC_PUBLISH;
+        for (int i = 0; i < n; i++)
+            out[i] = tmp[i];
+        *count = n;
+    }
+
     // ---------- NVS persistence ----------
     void saveToNVS()
     {
@@ -470,8 +504,11 @@ namespace sched
 
     void addException(uint32_t fromDay, uint32_t toDay, bool on)
     {
+        // Match the MQTT path: when full, evict the oldest-by-date exception so
+        // the newly added one always fits (previously this path silently
+        // dropped the new exception when the array was at capacity).
         if (excCount >= MAX_EXCEPTIONS)
-            return;
+            evictOldestException();
         exceptions[excCount].fromDay = fromDay;
         exceptions[excCount].toDay = toDay;
         exceptions[excCount].on = on;

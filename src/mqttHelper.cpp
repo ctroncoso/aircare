@@ -408,6 +408,24 @@ namespace mqtt
         doc["relay2"] = relay::state(2) ? "ON" : "OFF";  // UV channel (relay 2)
         doc["relay_both"] = relay::bothOn() ? "ON" : "OFF";
 
+        // Mirror the upcoming-exception view published in sensor telemetry so a
+        // manual REPORT also surfaces the next (up to 2) exceptions.
+        sched::ExceptionView excView[sched::MAX_EXC_PUBLISH];
+        int excViewCount = 0;
+        sched::getExceptionList(excView, &excViewCount);
+        if (excViewCount >= 1)
+        {
+            doc["exc1_from"]  = excView[0].fromDay;
+            doc["exc1_to"]    = excView[0].toDay;
+            doc["exc1_state"] = excView[0].on ? "ON" : "OFF";
+        }
+        if (excViewCount >= 2)
+        {
+            doc["exc2_from"]  = excView[1].fromDay;
+            doc["exc2_to"]    = excView[1].toDay;
+            doc["exc2_state"] = excView[1].on ? "ON" : "OFF";
+        }
+
         serializeJson(doc, reportBuf);
         mqtt::mqttPublish("cleanair/events", reportBuf);
         Serial.printf("MQTT: report -> %s\n", reportBuf);

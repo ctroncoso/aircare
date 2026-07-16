@@ -51,6 +51,17 @@ namespace sched
 
     const int MAX_EXCEPTIONS = 4;
 
+    // Compact, telemetry-friendly view of a stored exception, used to publish
+    // the upcoming exceptions to InfluxDB without exposing the internal array.
+    struct ExceptionView
+    {
+        uint32_t fromDay; // inclusive start day (YYYYMMDD)
+        uint32_t toDay;   // inclusive end day (YYYYMMDD)
+        bool     on;      // desired relay state during the range
+    };
+
+    const int MAX_EXC_PUBLISH = 2; // report only the next 2 upcoming exceptions
+
     // ---------- config / runtime state (defined in schedule.cpp) ----------
     extern const char *scheduleURL;
     extern Mode      mode;
@@ -89,6 +100,11 @@ namespace sched
     // ---------- exceptions maintenance ----------
     void pruneExpiredExceptions();
     void evictOldestException();
+
+    // Copy the stored exceptions into `out`, sorted by fromDay ascending, and
+    // set *count to min(excCount, MAX_EXC_PUBLISH). Used by telemetry/report to
+    // publish only the next (up to 2) upcoming exceptions.
+    void getExceptionList(ExceptionView out[MAX_EXC_PUBLISH], int *count);
 
     // ---------- event bus handler (subscribed in initSchedule) ----------
     void onEvent(Evt evt, void *ctx);
