@@ -2,12 +2,18 @@
   "uid": "aircare",
   "title": "AirCare",
   "description": "ESP32 air-quality sensor telemetry (InfluxDB)",
-  "tags": ["aircare", "esp32"],
+  "tags": [
+    "aircare",
+    "esp32"
+  ],
   "timezone": "America/Santiago",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
@@ -18,7 +24,10 @@
         "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"aircare\", tag: \"label\", predicate: (r) => r._measurement == \"sensor\", start: -30d)",
         "refresh": 2,
         "sort": 5,
-        "current": { "text": "all", "value": "$__all" },
+        "current": {
+          "text": "all",
+          "value": "$__all"
+        },
         "includeAll": true,
         "multi": false
       }
@@ -27,22 +36,38 @@
   "panels": [
     {
       "id": 1,
-      "title": "CO₂ (filtered/compensated)",
+      "title": "CO\u2082 (filtered/compensated)",
       "type": "timeseries",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ppm",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 700 },
-              { "color": "red", "value": 800 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 700
+              },
+              {
+                "color": "red",
+                "value": 800
+              }
             ]
           },
-          "thresholdsStyle": { "mode": "line" }
+          "thresholdsStyle": {
+            "mode": "line"
+          }
         },
         "overrides": []
       },
@@ -50,22 +75,32 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
       ]
     },
     {
       "id": 2,
-      "title": "CO₂ variants",
+      "title": "CO\u2082 variants",
       "type": "timeseries",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "ppm" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"co2_fc\" or r._field == \"co2_uc\" or r._field == \"co2_fu\" or r._field == \"co2_uu\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: if r._field == \"co2_fc\" then \"Filtered\" else if r._field == \"co2_uc\" then \"Uncompensated\" else if r._field == \"co2_fu\" then \"Forced\" else \"Unforced\" }))\n  |> group(columns: [\"label\", \"_field\"])"
         }
       ]
     },
@@ -74,13 +109,23 @@
       "title": "Temperature",
       "type": "timeseries",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "°C" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "\u00b0C"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"temp\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"temp\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
       ]
     },
@@ -89,13 +134,23 @@
       "title": "Humidity",
       "type": "timeseries",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "%" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "%"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
       ]
     },
@@ -104,13 +159,23 @@
       "title": "Pressure",
       "type": "timeseries",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "hPa" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "hPa"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"label\"])\n  |> group(columns: [\"label\"])"
         }
       ]
     },
@@ -119,12 +184,32 @@
       "title": "Relays (fan / UV)",
       "type": "state-timeline",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": { "lineWidth": 2, "fillOpacity": 70 },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 70
+          },
           "mappings": [
-            { "type": "value", "options": { "0": { "text": "OFF", "color": "blue" }, "1": { "text": "ON", "color": "red" } } }
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OFF",
+                  "color": "blue"
+                },
+                "1": {
+                  "text": "ON",
+                  "color": "red"
+                }
+              }
+            }
           ]
         },
         "overrides": []
@@ -133,22 +218,43 @@
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"rl1\" or r._field == \"rl2\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor\")\n  |> filter(fn: (r) => r._field == \"rl1\" or r._field == \"rl2\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"label\", \"_field\"])\n  |> map(fn: (r) => ({ _time: r._time, _value: r._value, series: r.label + \" \" + (if r._field == \"rl1\" then \"Fan\" else \"UV\") }))\n  |> group(columns: [\"series\"])"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "sort": "asc",
+          "sortDesc": false
+        }
+      }
     },
     {
       "id": 7,
       "title": "Events",
       "type": "table",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": "InfluxDB",
-          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> keep(columns: [\"_time\", \"label\", \"mac\", \"event\", \"param\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 100)"
+          "query": "from(bucket:\"aircare\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  |> keep(columns: [\"_time\", \"label\", \"event\", \"param\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 100)"
         }
       ]
     },
@@ -157,8 +263,20 @@
       "title": "Schedule state",
       "type": "table",
       "datasource": "InfluxDB",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
