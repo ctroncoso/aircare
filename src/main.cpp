@@ -100,10 +100,27 @@ void setup()
   // BEFORE connecting, so initMQTT() binds to the correct endpoint.
   cfg::initConfig();
 
+  // Map the ESP reset reason to a short, human-readable token so the Events
+  // panel can show "Power-on" / "Software reboot" instead of a numeric code.
+  auto bootReasonString = []() -> const char *
+  {
+    switch (esp_reset_reason())
+    {
+      case ESP_RST_POWERON:   return "POWERON";
+      case ESP_RST_SW:        return "SW";
+      case ESP_RST_PANIC:     return "PANIC";
+      case ESP_RST_TASK_WDT:  return "TASK_WDT";
+      case ESP_RST_WDT:       return "WDT";
+      case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+      case ESP_RST_BROWNOUT:  return "BROWNOUT";
+      default:                return "UNKNOWN";
+    }
+  };
+
   // Initialize connection to MQTT Broker.
   if (mqtt::initMQTT())
   {
-    mqtt::publishEvent(INFO, "BOOT|" + String(esp_reset_reason()) + "|Boot with reason");
+    mqtt::publishEvent(INFO, String("BOOT|") + bootReasonString() + "|Boot with reason");
     mqtt::publishEvent(INFO, "WIFI_RSSI|"+String(wifi_level)+"|WiFi connection strength.");
     mqtt::publishEvent(INFO, "MQTT|CONNECTED|MQTT conection established.");
     mqtt::publishEvent(INFO, "SNTP|TIME_SET|SNTP server connected. DateTime updated.");
