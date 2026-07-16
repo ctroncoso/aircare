@@ -13,6 +13,7 @@
 #include "configHelper.h"   // dynamic MQTT broker (cfg::)
 #include "actuators/relay.h"
 #include "core/events.h"
+#include "esp_task_wdt.h"
 
 #include "ESP32OTAPull.h"
 
@@ -169,6 +170,22 @@ void setup()
   
   
   mqtt::publishEvent(INFO, "SETUP|OK|Setup finished successfully.");
+
+  // Task Watchdog on the Arduino loop task: if loop() ever fails to complete
+  // within 30s (wedged HTTPS fetch, deadlocked timer, spin-loop), the chip
+  // reboots itself. Enabled LAST so the intentionally-blocking pre-restart
+  // waits above (sensor-init failures) — which already end in ESP.restart() —
+  // never trip it. loop() runs frequently enough that healthy operation keeps
+  // the watchdog fed automatically.
+  if (esp_task_wdt_init(30, true) == ESP_OK) // 30s timeout, panic+reboot on trip
+  {
+    esp_task_wdt_add(NULL); // NULL == current (loop) task
+    Serial.println("[WDT] Task watchdog armed (30s).");
+  }
+  else
+  {
+    Serial.println("[WDT] WARNING: task watchdog init failed.");
+  }
 }
 
 void loop()
@@ -189,6 +206,18 @@ void loop()
   // ESP32 MQTT pattern.
   mqtt::mqttLoop();
   //-----------------
+
+  // "Communication dead" watchdog: if the link looks alive enough to think
+  // it's fine yet no publish has actually succeeded for 60 min (a wedged TLS
+  // session that reconnect-backoff can't clear) while WiFi is still up, force
+  // a reboot so the socket/TLS state is rebuilt. A network outage alone won't
+  // trip this — commsIsDead() only fires when WiFi is associated.
+  if (mqtt::commsIsDead())
+  {
+    mqtt::publishEvent(ERROR, "MCU|COMMS_DEAD|No successful publish in 60 min — rebooting");
+    delay(2000); // best-effort: let the event flush via keepalive before restart
+    ESP.restart();
+  }
 }
 
 

@@ -26,6 +26,10 @@ namespace mqtt
     unsigned long mqttBackoffInterval();
     void mqttResetBackoff();
     void mqttPublish(const char *path, const char *content);
+    // "Communication dead" watchdog: true if no publish has succeeded for
+    // COMMS_DEAD_MS while WiFi is still associated. Used by the main loop to
+    // force an autonomous reboot that rebuilds a wedged TLS/socket state.
+    bool commsIsDead();
     void publishEvent(pub_event event, String param);
     // Publish a status snapshot (config/state + health) to cleanair/status.
     // Periodic health heartbeat and the on-demand REPORT command both use it.

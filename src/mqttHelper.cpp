@@ -52,6 +52,34 @@ namespace mqtt
     static const uint16_t MQTT_KEEPALIVE_S = 30;
 
     // ------------------------------------------------------------------------
+    // "Communication dead" watchdog — last-resort autonomous recovery.
+    //
+    // mqttLoop() already reconnects with exponential backoff, so a brief link
+    // drop is handled. But sometimes the TLS socket gets wedged (HiveMQ
+    // silently dropping the session yields rc=-1/-4 that backoff alone can't
+    // clear) and the device sits "connected enough" to think it's fine yet
+    // never delivers a packet. To catch that, we record the last time ANY
+    // publish actually succeeded. If that goes stale for too long *while WiFi
+    // is still up* (a network outage would not be fixed by rebooting), we force
+    // ESP.restart() so the TLS/socket state is rebuilt from scratch.
+    static unsigned long g_lastPublishOkMs = 0;   // 0 == "never succeeded"
+    static const unsigned long COMMS_DEAD_MS = 60UL * 60UL * 1000UL; // 60 min
+    static bool g_commsDeadRebooted = false;       // edge latch for the event
+
+    // Called from mqttPublish() only on a genuine successful client.publish().
+    inline void markPublishOk() { g_lastPublishOkMs = millis(); }
+
+    // True when no publish has succeeded for COMMS_DEAD_MS despite WiFi being
+    // associated. Returns false if WiFi itself is down (let the network recover
+    // rather than rebooting into the same outage).
+    bool commsIsDead()
+    {
+        if (WiFi.status() != WL_CONNECTED) return false; // network-side, not our fault
+        if (g_lastPublishOkMs == 0) return false;        // nothing to compare yet
+        return (millis() - g_lastPublishOkMs) >= COMMS_DEAD_MS;
+    }
+
+    // ------------------------------------------------------------------------
     // Telemetry buffer for dropped-connection resilience.
     //
     // When the broker link is down, measurementTick() keeps producing one
@@ -353,7 +381,7 @@ namespace mqtt
     {
         if (client.connected())
         {
-            client.publish(mq_path, content);
+            if (client.publish(mq_path, content)) markPublishOk();
             return;
         }
         if (strcmp(mq_path, "cleanair/sensor") == 0)

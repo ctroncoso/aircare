@@ -366,6 +366,102 @@
           }
         }
       ]
+    },
+    {
+      "id": 9,
+      "title": "Device liveness",
+      "type": "table",
+      "datasource": "InfluxDB",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "description": "Last successful status report per device. 'Stale' flags devices silent for >10 min \u2014 i.e. a possible loss of communication. Devices self-reboot after 60 min of no successful publish.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "cell",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stale"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "colorText"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "age_min"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "minutes"
+              },
+              {
+                "id": "custom.displayName",
+                "value": "Silent for"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_seen"
+            },
+            "properties": [
+              {
+                "id": "custom.displayName",
+                "value": "Last seen"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "InfluxDB",
+          "query": "last_status = from(bucket: \"aircare\")\n  |> range(start: -2h)\n  |> filter(fn: (r) => r._measurement == \"status\")\n  |> filter(fn: (r) => r.label =~ /${device:regex}/ or \"${device}\" == \"$__all\")\n  // Reduce to one field so last() yields a single row per device (status has many fields/types).\n  |> filter(fn: (r) => r._field == \"uptime_ms\")\n  |> last()\n  |> keep(columns: [\"_time\", \"label\"])\nages = last_status\n  |> map(fn: (r) => ({\n        Device: r.label,\n        last_seen: r._time,\n        age_min: float(v: int(v: uint(v: now()) - uint(v: r._time))) / 60000000000.0,\n        Stale: if (uint(v: now()) - uint(v: r._time)) > 600000000000 then \"YES (10m+)\" else \"ok\"\n      }))\n  |> sort(columns: [\"age_min\"], desc: true)\n  |> yield(name: \"ages\")\n",
+          "rawQuery": true
+        }
+      ]
     }
   ]
 }
