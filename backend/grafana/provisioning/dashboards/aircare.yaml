@@ -4,7 +4,7 @@ providers:
   - name: AirCare
     type: file
     disableDeletion: false
-    editable: true
+    editable: false
     options:
       path: /etc/grafana/provisioning/dashboards
       updateIntervalSeconds: 10
