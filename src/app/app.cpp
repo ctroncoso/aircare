@@ -1,6 +1,7 @@
 // app.cpp — application-level measurement / update cycles and telemetry.
 #include "app/app.h"
 #include "core/co2check.h" // co2Valid() — extracted for unit testing
+#include "core/board.h"    // PROGRAM_VERSION — emitted in telemetry/report/event JSON
 #include "mqttHelper.h"    // mqtt::mqttPump() — keep keepalive alive during blocking HTTP fetches
 
 // Shared telemetry buffer (was globals.h doc / serializedString).
@@ -125,6 +126,9 @@ void measurementTick()
             JsonDocument doc;
             doc["event"] = INFO;
             doc["param"] = "HEALTH|heap=" + String(ESP.getFreeHeap()) + "|rssi=" + String(WiFi.RSSI()) + "|uptime=" + String(millis());
+            doc["mac"] = WiFi.macAddress();
+            doc["label"] = cfg::label();
+            doc["fw"] = PROGRAM_VERSION;
             serializeJson(doc, healthBuf);
             mqtt::mqttPublish("cleanair/events", healthBuf);
         }
