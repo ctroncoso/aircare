@@ -41,6 +41,12 @@
 			"Version": "1.1.13",
 			"Device": "C8:F0:9E:9E:38:40",
 			"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.1.13.bin"
+		},
+		{
+			"Board": "Espressif ESP32 Dev Module",
+			"Version": "1.1.13",
+			"Device": "C8:F0:9E:9F:BE:D4",
+			"URL": "https://raw.githubusercontent.com/ctroncoso/aircare/main/bins/firmware.v.1.1.13.bin"
 		}
 	]
 }
