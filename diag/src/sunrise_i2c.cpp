@@ -133,13 +133,6 @@ boolean write16bit(uint8_t offsetReg, int8_t hiByte, int8_t loByte) {     // DON
 bool sunrise::initSunrise() {     // DONE!
   int attempts = 10;
   Wire.begin(DATA_PIN, CLOCK_PIN);
-  // Enable I2C pull-ups. The Sunrise spec calls for 1.5k-10k pull-ups; on a
-  // breadboard with none (or weak ones) the repeated-start reads wedge
-  // intermittently for the full Wire timeout (~9s), blocking loop() and
-  // tripping the task WDT. The ESP32's internal pull-ups are weak (~45k) but
-  // suffice on the test rig; external 1.5-4.7k resistors are recommended.
-  pinMode(DATA_PIN, INPUT_PULLUP);
-  pinMode(CLOCK_PIN, INPUT_PULLUP);
   Wire.setClock(100000);
   Wire.beginTransmission(SUNRISE_ADDRESS);
   while (Wire.endTransmission() != 2 && attempts >0)  // Receive 2 = success (Address NACK response)

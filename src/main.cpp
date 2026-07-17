@@ -13,6 +13,7 @@
 #include "configHelper.h"   // dynamic MQTT broker (cfg::)
 #include "actuators/relay.h"
 #include "core/events.h"
+#include "esp_task_wdt.h"
 
 #include "ESP32OTAPull.h"
 
@@ -175,25 +176,75 @@ void setup()
   // ota::checkUpdate() immediately after the one run during setup(), and
   // spreads the first periodic fetch to updateDelay after boot.
   previousTimer_2 = millis();
+
+  // Task Watchdog (2 min) — last-resort recovery from a wedged loop(). The OTA
+  // library does blocking, unbounded HTTPS (no transfer timeout) and a stalled
+  // TLS/manifest GET can hang loop() forever (seen: MCU froze at "Checking
+  // update"). The 2 min window is fed by the per-loop esp_task_wdt_reset() and
+  // by OTA's progress callback during the download (see otaHelper.cpp), while
+  // still catching a true stall. Armed LAST so the intentional pre-restart
+  // waits above never trip it. The out-of-band I2C monitor task is the primary
+  // fast recovery (10s recover / 30s reboot); this WDT is the backstop.
+  if (esp_task_wdt_init(120, true) == ESP_OK)
+  {
+    esp_task_wdt_add(NULL); // NULL == current (loop) task
+    Serial.println("[WDT] Task watchdog armed (120s).");
+  }
+  else
+  {
+    Serial.println("[WDT] WARNING: task watchdog init failed.");
+  }
+
+  // Arm the I2C hardware timeout and start the out-of-band wedge monitor task
+  // (catches a bus wedge that blocks loop() inside the I2C driver).
+  initI2cWatch();
 }
 
 void loop()
 {
   unsigned long currentTime = millis();
 
-
+  unsigned long t0 = millis();
+  // Feed the task WDT every loop(): it now only fires on a *genuine* stall
+  // (loop() blocked inside the I2C driver or an OTA download we don't feed),
+  // not on a merely slow-but-progressing cycle. OTA's progress callback also
+  // feeds it during the download.
+  esp_task_wdt_reset();
   button.tick();
-  ntp::resyncIfStale();   // force a fresh NTP sync if poll mode has gone quiet
+  ntp::resyncIfStale();   // force a fresh NTP sync if poll mode has gone quiet (async, non-blocking)
+#ifdef DBG_WDT
+  Serial.println("[DBG] > measurementTick");
   measurementTick();
+  Serial.println("[DBG] < measurementTick");
+#else
+  measurementTick();
+#endif
   sched::tick();   // event-driven relay scheduler: fire transitions at their edges
+#ifdef DBG_WDT
+  if (millis() - t0 > 1000) Serial.printf("[DBG] loop pre-update took %lu ms\n", millis() - t0);
+  t0 = millis();
+  Serial.println("[DBG] > updateTick");
   updateTick(); // check for updates and install.
+  Serial.println("[DBG] < updateTick");
+  if (millis() - t0 > 1000) Serial.printf("[DBG] updateTick took %lu ms\n", millis() - t0);
+#else
+  updateTick();
+#endif
 
   //-------------MQTT
   // mqttLoop() pumps the keepalive (PINGREQ) and inbound messages every cycle,
   // and reconnects on a fixed 15s cadence if the link drops. No separate thread
   // is used — PubSubClient is not thread-safe; the main loop is the standard
   // ESP32 MQTT pattern.
+#ifdef DBG_WDT
+  t0 = millis();
+  Serial.println("[DBG] > mqttLoop");
   mqtt::mqttLoop();
+  Serial.println("[DBG] < mqttLoop");
+  if (millis() - t0 > 1000) Serial.printf("[DBG] mqttLoop took %lu ms\n", millis() - t0);
+#else
+  mqtt::mqttLoop();
+#endif
   //-----------------
 
   // "Communication dead" watchdog: if the link looks alive enough to think

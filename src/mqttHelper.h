@@ -31,6 +31,10 @@ namespace mqtt
     // force an autonomous reboot that rebuilds a wedged TLS/socket state.
     bool commsIsDead();
     void publishEvent(pub_event event, String param);
+    // Publish a "Warning" severity message to the dedicated aircare/event topic
+    // (separate from cleanair/events). Used for recoverable hardware faults
+    // such as an I2C sensor read timeout/bus recovery.
+    void publishWarning(String param);
     // Publish a status snapshot (config/state + health) to cleanair/status.
     // Periodic health heartbeat and the on-demand REPORT command both use it.
     void publishStatus(const char *param);

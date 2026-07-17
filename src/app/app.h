@@ -25,3 +25,4 @@ String state2string();
 
 void measurementTick();
 void updateTick();
+void initI2cWatch(); // arm I2C hardware timeout + start out-of-band wedge monitor task

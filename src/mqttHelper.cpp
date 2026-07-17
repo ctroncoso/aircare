@@ -411,6 +411,22 @@ namespace mqtt
         mqtt::mqttPublish("cleanair/events", eventBuf);
     }
 
+    // Publish a Warning to the dedicated aircare/event topic. Uses a string
+    // severity ("Warning") — distinct from cleanair/events (numeric event code)
+    // — so operators can route/alert on hardware faults separately.
+    void publishWarning(String param)
+    {
+        static char warnBuf[512];
+        JsonDocument doc;
+        doc["event"] = "Warning";
+        doc["param"] = param;
+        doc["mac"] = WiFi.macAddress();
+        doc["label"] = cfg::label();
+        doc["fw"] = PROGRAM_VERSION;
+        serializeJson(doc, warnBuf);
+        mqtt::mqttPublish("aircare/event", warnBuf);
+    }
+
     // Publish a status snapshot (config/state + health) to cleanair/status.
     // Covers both the periodic health heartbeat and the on-demand REPORT
     // command. Carries MAC/label/fw, the health snapshot (local time, RSSI,

@@ -2,6 +2,7 @@
 #include "otaHelper.h"
 #include "core/board.h"  // updateURL — centralised manifest URL constant
 #include "mqttHelper.h"  // publishEvent / client.connected() — guarded, see below
+#include "esp_task_wdt.h" // feed the watchdog during the (slow, blocking) OTA download
 
 namespace ota
 {
@@ -11,6 +12,11 @@ namespace ota
     {
         Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
         leds::flipLed(ledPinY);
+        // The OTA download is a long, blocking, synchronous HTTPS transfer that
+        // can take >1 min (up to ~4 min on a slow link). Feed the task watchdog
+        // here so a genuine download keeps the device alive, while a *stalled*
+        // socket (no progress callbacks) still lets the 240s timeout fire.
+        esp_task_wdt_reset();
     }
 
     const char *errtext(int code)
