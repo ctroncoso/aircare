@@ -28,12 +28,12 @@ void startWifiPortal();
 // replaces the old `mqttNeedsReconnect` global handshake polled in loop().
 void brokerChangedHandler(Evt evt, void *ctx)
 {
-  if (evt == Evt::BrokerChanged)
-  {
-    Serial.printf("[CFG] Broker swap -> disconnecting from %s:%d\n",
-                  cfg::brokerHost, cfg::brokerPort);
-    mqtt::client.disconnect();
-  }
+    if (evt == Evt::BrokerChanged)
+    {
+      Serial.printf("[CFG] Broker swap -> disconnecting from %s:%d\n",
+                    cfg::brokerHost, cfg::brokerPort);
+      mqtt::forceDisconnect(); // thread-safe: signals the MQTT task to drop the socket
+    }
 }
 
 void setup()
@@ -140,6 +140,11 @@ void setup()
     Serial.println("MQTT unavailable. Continuing setup without broker.");
   }
 
+  // Move all MQTT socket I/O into its own pinned task + watchdog so loopTask
+  // can never be wedged by a blocking TLS call (the cause of the repeated
+  // task-WDT resets). From here loopTask publishes only via mqttPublish().
+  mqtt::startMqttTask();
+
   
 
                  
@@ -236,23 +241,13 @@ void loop()
   // is used — PubSubClient is not thread-safe; the main loop is the standard
   // ESP32 MQTT pattern.
   // While an OTA is in flight we do NOT touch the MQTT socket at all (Fix B+):
-  // even mqttPump() -> client.loop() does a blocking recv() with no upper bound,
-  // and a stalled/starved TLS socket during the download parks loopTask in recv()
-  // forever, tripping the 120s task WDT. The OTA window is <=100s (watchdog
-  // abort) vs a 30s keepalive, so a brief keepalive gap is harmless; the link is
-  // re-pumped/reconnected the moment g_updating clears. The independent OTA
-  // watchdog still aborts a stuck download task itself — and raises a flag that
-  // we publish here (thread-safe) so loopTask, not the watchdog task, owns the
-  // non-thread-safe PubSubClient.
-  if (ota::isUpdating())
-  {
-      ota::publishOtaTimeoutWarning(); // no-op unless the watchdog flagged a stall
-  }
-  else
-  {
-      mqtt::mqttLoop();
-      ota::publishOtaTimeoutWarning(); // flush any pending OTA-timeout Warning
-  }
+  // the MQTT task (mqttTask) owns the broker socket on core 0, fully separate
+  // from loopTask, so loopTask can never be wedged by a blocking TLS call. The
+  // OTA window is <=100s (watchdog abort) vs a 30s keepalive, so a brief
+  // keepalive gap is harmless; the MQTT task reconnects the moment g_updating
+  // clears. The independent OTA watchdog still aborts a stuck download task
+  // itself — and raises a flag that the MQTT task publishes next cycle.
+  ota::publishOtaTimeoutWarning(); // no-op unless the OTA watchdog flagged a stall
   //-----------------
 
   // "Communication dead" watchdog: if the link looks alive enough to think

@@ -6,10 +6,29 @@
 #include "ntpHelper.h"  // ntp::getTime() / ntp::getTM() — local time for the report
 #include "actuators/relay.h"  // relay::state() — relay status for the report
 #include <cctype>      // toupper() — normalize command casing
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
 
 namespace mqtt
 {
-    PubSubClient client(espClient); // defined here (single TU)
+    PubSubClient client(espClient); // defined here (single TU) — owned ONLY by mqttTask
+
+    // --- MQTT moved off loopTask (fixes loopTask WDT wedges) -----------------
+    // PubSubClient::readByte() busy-waits on available() and client.connect()'s
+    // TLS handshake can block forever (WiFiClientSecure::setTimeout is a no-op
+    // for the TLS recv/handshake in this core). Any of those on loopTask wedged
+    // loop() and tripped the 120s task WDT. So ALL client network I/O now runs
+    // in mqttTask (pinned core 0); loopTask only enqueues publishes to a
+    // thread-safe queue. A dedicated mqttWatchdogTask deletes+recreates mqttTask
+    // if it ever wedges, so a bad TLS handshake recovers WITHOUT rebooting and
+    // WITHOUT freezing the sensors/I2C/OTA on loopTask.
+    #define MQTT_TASK_WEDGE_MS 30000   // mqttTask must cycle within this or it's killed
+    static QueueHandle_t g_pubQ = nullptr;
+    static TaskHandle_t g_mqttTask = nullptr;
+    static volatile uint32_t g_mqttAliveMs = 0;   // set each mqttTask iteration
+    static volatile bool    g_mqttForceDisc = false;
+    static bool             g_mqttTaskRunning = false;
 
     // Print the exact parameters used for the broker connection so configuration
     // mismatches (host/port/user) are visible in the serial log.
@@ -48,6 +67,8 @@ namespace mqtt
     static uint8_t g_backoffStep = 0;
     static const unsigned long BACKOFF_BASE_MS = 1000;    // 1 s — start small, grow exponentially
     static const unsigned long BACKOFF_MAX_MS  = 30000;   // 30 s cap
+    static unsigned long g_lastReconnectAttempt = 0;      // last reconnect try (ms)
+    static unsigned long g_reconnectDelay = BACKOFF_BASE_MS; // current backoff (grows on failure)
 
     // MQTT keepalive period (seconds). 30s gives the broker a 45s grace window
     // before it may drop an idle socket — comfortably covering the blocking
@@ -338,6 +359,9 @@ namespace mqtt
         return client.connected();
     }
 
+    // startMqttTask() / isConnected() are defined later, after the MQTT task
+    // machinery they reference (PubItem / mqttTask / mqttWatchdogTask).
+
     // Subscribe to the inbound command topics and confirm on the events channel
     // so it is verifiable (from the server side) that the device is actually
     // listening for remote commands. Called on every (re)connect.
@@ -377,102 +401,221 @@ namespace mqtt
         return client.connected();
     }
 
-    // Single entry point called every loop(): pumps the MQTT client (sends
-    // keepalive PINGREQs and processes inbound messages) and, if the link has
-    // dropped, attempts one reconnect with exponential backoff. A dedicated
-    // thread is unnecessary and unsafe here — PubSubClient is not thread-safe —
-    // so we keep everything on the main loop, which is the standard ESP32 MQTT
-    // pattern. The backoff (1s -> 30s cap) follows the HiveMQ guidance so we
-    // don't hammer the broker after an abrupt disconnect (which makes it stop
-    // answering the TLS handshake, rc=-1/-4) yet recover quickly when the link
-    // is only briefly down.
-    static unsigned long g_lastReconnectAttempt = 0;
-    static unsigned long g_reconnectDelay = BACKOFF_BASE_MS; // grows on repeated failures
+    // --- async MQTT task machinery (inserted after deps are declared) --------
+    // Publish queue item: topic + payload.
+    struct PubItem
+    {
+        char topic[64];
+        char payload[512 + 1];
+    };
+
+    // Enqueue a publish (thread-safe, non-blocking). Used by loopTask and any
+    // other task; the mqttTask drains it. Drops if full.
+    static bool pubEnqueue(const char *topic, const char *payload)
+    {
+        if (g_pubQ == nullptr) return false;
+        PubItem item;
+        strncpy(item.topic, topic, sizeof(item.topic) - 1);
+        item.topic[sizeof(item.topic) - 1] = '\0';
+        strncpy(item.payload, payload, sizeof(item.payload) - 1);
+        item.payload[sizeof(item.payload) - 1] = '\0';
+        return xQueueSend(g_pubQ, &item, 0) == pdTRUE;
+    }
+
+    // Drain the publish queue: publish each item; if a sensor-topic publish
+    // fails (link down), buffer it to NVS so a reboot/outage doesn't lose it.
+    static void drainPubQueue()
+    {
+        PubItem item;
+        while (xQueueReceive(g_pubQ, &item, 0) == pdTRUE)
+        {
+            bool sensor = (strcmp(item.topic, "cleanair/sensor") == 0);
+            if (client.connected())
+            {
+                if (client.publish(item.topic, item.payload))
+                {
+                    markPublishOk();
+                    g_lastMqttTrafficMs = millis();
+                }
+                else if (sensor)
+                {
+                    qPush(item.payload);
+                    persistQueue();
+                }
+            }
+            else if (sensor)
+            {
+                qPush(item.payload);
+                persistQueue();
+            }
+        }
+    }
+
+    // Flush any NVS-backed buffer on (re)connect (defined earlier, near the
+    // queue helpers; drains buffered telemetry and emits a RECOVERED event).
+
+    // The MQTT task: owns client/espClient exclusively. Reconnects (bounded by
+    // the watchdog) and pumps keepalive + inbound + drains the publish queue.
+    static void mqttTask(void *pv)
+    {
+        (void)pv;
+        for (;;)
+        {
+            g_mqttAliveMs = millis(); // watchdog liveness heartbeat
+
+            if (g_mqttForceDisc)
+            {
+                espClient.stop();
+                client.disconnect();
+                g_mqttForceDisc = false;
+            }
+
+            if (!client.connected())
+            {
+                unsigned long now = millis();
+                if (now - g_lastReconnectAttempt >= g_reconnectDelay)
+                {
+                    g_lastReconnectAttempt = now;
+                    mqttTryReconnect();
+                    if (client.connected())
+                    {
+                        g_lastMqttTrafficMs = millis();
+                        g_lastReconnectAttempt = 0;
+                        g_reconnectDelay = BACKOFF_BASE_MS;
+                        mqttResetBackoff();
+                        mqttFlushQueue();
+                    }
+                    else
+                    {
+                        g_backoffStep++;
+                        g_reconnectDelay = mqttBackoffInterval();
+                    }
+                }
+            }
+            else
+            {
+                // Only loop() when inbound data is pending (readByte can't spin).
+                if (espClient.available() > 0)
+                {
+                    client.loop();
+                    g_lastMqttTrafficMs = millis();
+                }
+                drainPubQueue();
+                g_lastReconnectAttempt = 0;
+                g_reconnectDelay = BACKOFF_BASE_MS;
+                mqttResetBackoff();
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(50)); // 20 Hz poll; yields to other tasks
+        }
+    }
+
+    // Watchdog for mqttTask: if it hasn't cycled within MQTT_TASK_WEDGE_MS (a
+    // wedged TLS handshake/recv), kill and recreate it so the socket/TLS state
+    // is rebuilt. loopTask is unaffected and keeps running.
+    static void mqttWatchdogTask(void *pv)
+    {
+        (void)pv;
+        for (;;)
+        {
+            if (g_mqttTaskRunning && (millis() - g_mqttAliveMs >= MQTT_TASK_WEDGE_MS))
+            {
+                Serial.printf("[MQTT] task wedged >%ds — killing & restarting\n",
+                              MQTT_TASK_WEDGE_MS / 1000);
+                if (g_mqttTask != nullptr)
+                {
+                    vTaskDelete(g_mqttTask);
+                    g_mqttTask = nullptr;
+                }
+                g_mqttTaskRunning = false;
+            }
+            if (!g_mqttTaskRunning && g_pubQ != nullptr)
+            {
+                g_mqttAliveMs = millis();
+                BaseType_t ok = xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 3, &g_mqttTask, 0);
+                if (ok == pdPASS)
+                {
+                    g_mqttTaskRunning = true;
+                    Serial.println("[MQTT] task (re)started");
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
+    // Start the async MQTT task + its watchdog. Call ONCE from setup(), AFTER
+    // initMQTT() has connected the first time (so the task inherits a live
+    // socket). From this point loopTask must NOT touch client/espClient — it
+    // publishes only via mqttPublish() (queue). The watchdog recreates the task
+    // if a TLS handshake/recv ever wedges it, so loopTask (sensors/I2C/OTA) is
+    // never blocked by the broker.
+    void startMqttTask()
+    {
+        static bool started = false;
+        if (started) return;
+        started = true;
+        g_pubQ = xQueueCreate(32, sizeof(PubItem));
+        g_mqttAliveMs = millis();
+        xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 3, &g_mqttTask, 0);
+        g_mqttTaskRunning = true;
+        xTaskCreatePinnedToCore(mqttWatchdogTask, "mqtt_wdog", 2048, NULL, 1, NULL, 0);
+        Serial.println("[MQTT] async task + watchdog started (loopTask off the socket).");
+    }
+
+    // True when the broker link is currently up (read by loopTask/diagnostics).
+    bool isConnected()
+    {
+        return client.connected();
+    }
+
+    // mqttLoop() is now a no-op for the running system: the mqttTask (started by
+    // startMqttTask()) owns all client I/O. Kept as an API shim so callers don't
+    // change. It does nothing once the task is running.
     void mqttLoop()
     {
-        // Gate client.loop() so it never blocks on a stale/empty TLS socket
-        // (see mqttCanLoop). Only the bounded reconnect branch or a read with
-        // pending inbound data is ever executed here.
-        if (mqttCanLoop())
-        {
-            client.loop(); // keepalive + inbound (safe: data pending or reconnecting)
-            mqttMarkTraffic();
-        }
-        bool connected = client.connected();
-        if (!connected)
-        {
-            unsigned long now = millis();
-            if (now - g_lastReconnectAttempt >= g_reconnectDelay)
-            {
-                g_lastReconnectAttempt = now;
-                mqttTryReconnect();
-                connected = client.connected();
-                if (!connected)
-                {
-                    g_backoffStep++;
-                    g_reconnectDelay = mqttBackoffInterval();
-                }
-                else
-                {
-                    g_lastMqttTrafficMs = millis(); // reset stale timer on (re)connect
-                }
-            }
-        }
-        else
-        {
-            g_lastReconnectAttempt = 0; // next drop retries after the base delay
-            g_reconnectDelay = BACKOFF_BASE_MS;
-            mqttResetBackoff();         // clear any boot backoff state
-        }
-        // Edge: false -> true == a (re)connect just happened -> drain the buffer.
-        if (connected && !g_wasConnected) mqttFlushQueue();
-        g_wasConnected = connected;
+        // Intentionally empty: MQTT I/O runs in mqttTask. (See startMqttTask.)
     }
 
-    // Pump the MQTT client without attempting reconnects — used during blocking
-    // waits in setup() (sensor init, HTTP fetches) so the keepalive PINGREQ is
-    // sent and the broker doesn't drop the idle socket. Does NOT call connect().
-    // Gated the same way as mqttLoop() so it can never block loopTask.
+    // Pump the MQTT client synchronously — ONLY valid during setup(), before
+    // startMqttTask() launches the async mqttTask (used in the bounded sensor-
+    // init waits). After the task starts, publishing goes through the queue.
     void mqttPump()
     {
-        if (mqttCanLoop())
+        if (!g_mqttTaskRunning)
         {
-            client.loop();
-            mqttMarkTraffic();
+            if (mqttCanLoop())
+            {
+                client.loop();
+                mqttMarkTraffic();
+            }
         }
     }
 
-    // Tear down the MQTT socket unconditionally (see header).
+    // Tear down the MQTT socket — signals the mqttTask to disconnect (thread-
+    // safe; the task owns the socket). Used after an OTA window so the stale
+    // TLS session is rebuilt by mqttTask rather than risking a blocking read.
     void forceDisconnect()
     {
-        espClient.stop();
-        client.disconnect();
+        g_mqttForceDisc = true;
     }
 
-    // Publishes to the broker. If the link is down, telemetry destined for the
-    // sensor topic is buffered (RAM + NVS) and replayed on the next reconnect;
-    // all other topics (events, etc.) are dropped while disconnected — events
-    // are "now"-oriented and replaying a stale one later is just noise.
+    // Publishes to the broker. Enqueues to the thread-safe publish queue (the
+    // mqttTask drains it). This lets loopTask publish without ever touching the
+    // non-thread-safe client. If the link is down when the task drains it, sensor
+    // telemetry is buffered to RAM+NVS and replayed on reconnect; other topics
+    // (events/warnings) are best-effort and dropped while disconnected.
     void mqttPublish(const char *mq_path, const char *content)
     {
-        if (client.connected())
+        if (!pubEnqueue(mq_path, content))
         {
-            if (client.publish(mq_path, content))
+            // Queue full: buffer sensor telemetry to NVS so it isn't lost; drop
+            // everything else (events are "now"-oriented).
+            if (strcmp(mq_path, "cleanair/sensor") == 0)
             {
-                markPublishOk();
-                g_lastMqttTrafficMs = millis(); // outbound traffic keeps link alive
+                qPush(content);
+                persistQueue();
+                Serial.printf("MQTT: queue full — buffered sample (%d pending)\n", g_qCount);
             }
-            return;
-        }
-        if (strcmp(mq_path, "cleanair/sensor") == 0)
-        {
-            qPush(content);
-            persistQueue();
-            Serial.printf("MQTT: link down — buffered sample (%d pending)\n", g_qCount);
-        }
-        else
-        {
-            Serial.println("MQTT: skipping publish, not connected.");
         }
     }
 

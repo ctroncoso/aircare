@@ -20,9 +20,17 @@ namespace mqtt
     void subscribeCommands();
     void mqttLoop();
     void mqttPump();
-    // Tear down the MQTT socket unconditionally (used after an OTA window, when
-    // the TLS session has been idle/stale for the whole download, so the next
-    // mqttLoop() reconnects cleanly instead of risking a blocking read).
+    // Start the async MQTT task + its own watchdog (see mqttHelper.cpp). Call
+    // ONCE from setup() AFTER initMQTT() has connected. After this, loopTask
+    // must NOT touch client/espClient — it publishes only via mqttPublish()
+    // (thread-safe queue). The watchdog recreates the MQTT task if a TLS
+    // handshake/recv ever wedges it, so loopTask is never blocked by the broker.
+    void startMqttTask();
+    // True when the broker link is currently up.
+    bool isConnected();
+    // Tear down the MQTT socket — signals the MQTT task to disconnect so it
+    // rebuilds a clean TLS session (used after an OTA window, when the session
+    // has been idle/stale for the whole download). Thread-safe.
     void forceDisconnect();
     // Returns the current backoff interval (ms) for the periodic reconnect,
     // growing exponentially with each failed attempt and capped. Call

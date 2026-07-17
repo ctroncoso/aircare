@@ -116,18 +116,16 @@ namespace ota
     }
 
     // Reboot the device, flushing serial and (if connected) an event first.
-    // checkUpdate() may be called from setup() before MQTT is up, so the
-    // publish is guarded by client.connected().
+    // The event is enqueued (thread-safe); the MQTT task flushes it. We can't
+    // touch client directly here (owned by mqttTask), so use isConnected().
     void doReboot(const char *reason)
     {
-        if (mqtt::client.connected())
+        if (mqtt::isConnected())
         {
             mqtt::publishEvent(INFO, String("MCU|RESTART|") + reason);
-            // Pump once so the PUBLISH actually goes out before we reset.
-            mqtt::mqttPump();
         }
         leds::blinkLed(ledPinG, 3, false);
-        delay(2000);
+        delay(2000); // best-effort: let the MQTT task drain the queue before reset
         ESP.restart();
     }
 
