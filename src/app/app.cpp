@@ -302,6 +302,9 @@ void measurementTick()
     if (currentTime - previousTimer_1 >= measurementDelay)
     {
         previousTimer_1 = currentTime;
+#ifdef DBG_WDT
+        Serial.println("[DBG] measurementTick");
+#endif
 
         // Relay state is owned by the event-driven sched:: engine and applied
         // via actuators/relay; we only read relay::state() for telemetry.
@@ -344,45 +347,47 @@ void updateTick()
     if (currentTime - previousTimer_2 >= updateDelay)
     {
         previousTimer_2 = currentTime;
-        mqtt::mqttPump(); // keep keepalive alive across the blocking HTTP calls below
 #ifdef DBG_WDT
-        unsigned long t = millis();
-        Serial.println("[DBG] > ota::checkUpdate");
-        ota::checkUpdate();
-        Serial.printf("[DBG] < ota::checkUpdate took %lu ms\n", millis() - t);
-#else
-        ota::checkUpdate();
+        Serial.println("[DBG] updateTick");
 #endif
+        mqtt::mqttPump(); // keep keepalive alive across the blocking HTTP calls below
+        ota::checkUpdate(); // async: launches a task, returns immediately
         mqtt::mqttPump();
 
-        // The OTA install above sets ota::g_updating and runs exclusively. If an
-        // update was just applied it has already rebooted; if it is still in
-        // progress (or just finished this cycle), skip the other blocking
-        // fetches so the OTA write is never interleaved with another long HTTPS
-        // GET or a broker swap — that keeps the remote-update path safe.
+        // While an OTA is in flight the download task runs exclusively; skip the
+        // other blocking fetches so the OTA is never interleaved with another
+        // long HTTPS GET or a broker swap. If an update installed, the task
+        // rebooted; if it aborted/completed, g_updating is cleared and we resume.
         if (ota::g_updating)
         {
+#ifdef DBG_OTA
             Serial.println("[APP] OTA in progress — skipping schedule/config fetch this cycle.");
-            return;
+#endif
         }
-
+        else
+        {
 #ifdef DBG_WDT
-        t = millis();
-        Serial.println("[DBG] > sched::fetchSchedule");
-        sched::fetchSchedule(); // re-fetch schedule (falls back to NVS on failure)
-        Serial.printf("[DBG] < sched::fetchSchedule took %lu ms\n", millis() - t);
+            unsigned long t = millis();
+            Serial.println("[DBG] > sched::fetchSchedule");
+            sched::fetchSchedule(); // re-fetch schedule (falls back to NVS on failure)
+            Serial.printf("[DBG] < sched::fetchSchedule took %lu ms\n", millis() - t);
 #else
-        sched::fetchSchedule();
+            sched::fetchSchedule();
 #endif
-        mqtt::mqttPump();
+            mqtt::mqttPump();
 #ifdef DBG_WDT
-        t = millis();
-        Serial.println("[DBG] > cfg::fetchConfig");
-        cfg::fetchConfig(); // re-fetch broker config (emits Evt::BrokerChanged on change)
-        Serial.printf("[DBG] < cfg::fetchConfig took %lu ms\n", millis() - t);
+            t = millis();
+            Serial.println("[DBG] > cfg::fetchConfig");
+            cfg::fetchConfig(); // re-fetch broker config (emits Evt::BrokerChanged on change)
+            Serial.printf("[DBG] < cfg::fetchConfig took %lu ms\n", millis() - t);
 #else
-        cfg::fetchConfig();
+            cfg::fetchConfig();
 #endif
-        mqtt::mqttPump();
+            mqtt::mqttPump();
+        }
     }
+
+    // Pump the OTA timeout watchdog EVERY cycle (not just on the update
+    // cadence) so a stalled download is aborted promptly even between checks.
+    ota::pump();
 }

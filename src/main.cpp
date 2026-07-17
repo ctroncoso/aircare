@@ -198,13 +198,16 @@ void setup()
   // Arm the I2C hardware timeout and start the out-of-band wedge monitor task
   // (catches a bus wedge that blocks loop() inside the I2C driver).
   initI2cWatch();
+
+  // Start the independent OTA watchdog task (Fix A): aborts a stalled download
+  // cleanly even if loop() is itself frozen by OTA/MQTT TLS contention.
+  ota::initOtaWatch();
 }
 
 void loop()
 {
   unsigned long currentTime = millis();
 
-  unsigned long t0 = millis();
   // Feed the task WDT every loop(): it now only fires on a *genuine* stall
   // (loop() blocked inside the I2C driver or an OTA download we don't feed),
   // not on a merely slow-but-progressing cycle. OTA's progress callback also
@@ -212,39 +215,35 @@ void loop()
   esp_task_wdt_reset();
   button.tick();
   ntp::resyncIfStale();   // force a fresh NTP sync if poll mode has gone quiet (async, non-blocking)
-#ifdef DBG_WDT
-  Serial.println("[DBG] > measurementTick");
+  // Lightweight liveness heartbeat (every 10s) — proves loop() is still
+  // cycling without flooding the console. DBG_WDT step markers live INSIDE
+  // the timed blocks (see app.cpp), so they only print when the work runs.
+  {
+    static unsigned long lastHb = 0;
+    if (currentTime - lastHb >= 10000)
+    {
+      lastHb = currentTime;
+      Serial.printf("[HB] t=%lu free=%u\n", currentTime, esp_get_free_heap_size());
+    }
+  }
   measurementTick();
-  Serial.println("[DBG] < measurementTick");
-#else
-  measurementTick();
-#endif
   sched::tick();   // event-driven relay scheduler: fire transitions at their edges
-#ifdef DBG_WDT
-  if (millis() - t0 > 1000) Serial.printf("[DBG] loop pre-update took %lu ms\n", millis() - t0);
-  t0 = millis();
-  Serial.println("[DBG] > updateTick");
-  updateTick(); // check for updates and install.
-  Serial.println("[DBG] < updateTick");
-  if (millis() - t0 > 1000) Serial.printf("[DBG] updateTick took %lu ms\n", millis() - t0);
-#else
   updateTick();
-#endif
 
   //-------------MQTT
   // mqttLoop() pumps the keepalive (PINGREQ) and inbound messages every cycle,
   // and reconnects on a fixed 15s cadence if the link drops. No separate thread
   // is used — PubSubClient is not thread-safe; the main loop is the standard
   // ESP32 MQTT pattern.
-#ifdef DBG_WDT
-  t0 = millis();
-  Serial.println("[DBG] > mqttLoop");
-  mqtt::mqttLoop();
-  Serial.println("[DBG] < mqttLoop");
-  if (millis() - t0 > 1000) Serial.printf("[DBG] mqttLoop took %lu ms\n", millis() - t0);
-#else
-  mqtt::mqttLoop();
-#endif
+  // While an OTA is in flight we only pump the keepalive (Fix B): a full
+  // mqttLoop() may block on the MQTT TLS socket that is contending the WiFi
+  // stack with the OTA download task, which previously froze loop() entirely
+  // and defeated the OTA backstop. The independent OTA watchdog still aborts a
+  // stuck download; we just don't let the MQTT reconnect path wedge loop().
+  if (ota::isUpdating())
+      mqtt::mqttPump();
+  else
+      mqtt::mqttLoop();
   //-----------------
 
   // "Communication dead" watchdog: if the link looks alive enough to think

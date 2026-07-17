@@ -1,6 +1,6 @@
 # AirCare — Indoor Air Quality Monitor
 
-**Version:** 1.1.14 | **Board:** ESP32 Dev Module | **Framework:** Arduino
+**Version:** 1.1.20 | **Board:** ESP32 Dev Module | **Framework:** Arduino
 
 AirCare is an IoT firmware for the ESP32 microcontroller that monitors indoor air quality using two main sensors:
 
@@ -8,6 +8,21 @@ AirCare is an IoT firmware for the ESP32 microcontroller that monitors indoor ai
 - **Bosch BME280** — a combined temperature, humidity, and barometric pressure sensor (I²C)
 
 The device reads sensor data on a configurable interval, publishes the measurements to an MQTT broker, controls two relay outputs (fan and UV filter) based on a time schedule, and supports Over-The-Air (OTA) firmware updates. A tri-color LED (Red / Yellow / Green) provides a visual indication of the current CO₂ level.
+
+---
+
+> ⚠️ **WARNING — non-persistent monkey-patch in the OTA library**
+>
+> The vendored `ESP32-OTA-Pull` library (`.pio/libdeps/.../ESP32-OTA-Pull/src/ESP32OTAPull.h`) has been **monkey-patched in place** to add HTTP timeouts:
+> ```cpp
+> http.setConnectTimeout(3000);   // 3s connect / DNS cap
+> http.setTimeout(15000);         // 15s data-transfer cap
+> ```
+> These calls live in `DownloadJson()` and `DoOTAUpdate()` (right after each `http.begin()`). They prevent a stalled/slow server or dropped DNS request from hanging the OTA download indefinitely (which previously wedged `loop()` until the task WDT reset).
+>
+> **This patch is NOT in the upstream repo and is LOST whenever the library is re-fetched** — i.e. on `pio pkg update`, `pio lib update`, a `pio clean` + rebuild that re-downloads deps, or any `platformio.ini` `platform = espressif32 @ x.y.z` core bump that triggers a dependency refresh. After any such operation, **re-apply the two `setConnectTimeout`/`setTimeout` lines above** or the OTA-hang regression returns.
+>
+> The firmware also runs the OTA in an **async task** with an **independent OTA watchdog task** (`ota::initOtaWatch()` in `src/otaHelper.cpp`) that clean-aborts a stalled download even if `loop()` itself is frozen by WiFi/TLS contention — plus the `ota::pump()` secondary guard. Both are in our source and *are* persistent.
 
 ---
 
@@ -172,7 +187,7 @@ entry }`. Used by both `configHelper` and the schedule fetcher so the
 | `printValues()`         | Builds the JSON telemetry document, serialises it into a bounded `512+1` buffer, and prints it (plus the next-transition line). |
 | `state2string()`        | Converts the current CO₂ condition to a human‑readable string. |
 | `measurementTick()`     | Every 1 min: reads sensors, **validates** the CO₂ sample (`co2Valid()` + error-status); if invalid it skips publish/LED so a stale/zero reading never shows as "Green". Otherwise publishes `/cleanair/sensor` and updates the LED. Also emits periodic HEALTH telemetry every 5 min. |
-| `updateTick()`          | Every 10 min: runs `ota::checkUpdate()`, then refreshes the remote schedule and broker config (skipped while an OTA is in progress). |
+| `updateTick()`          | Every 10 min: runs `ota::checkUpdate()` (async — returns immediately), then refreshes the remote schedule and broker config (skipped while an OTA is in progress). The schedule/config fetches live **inside** this 10‑min gate (not every loop), so they no longer spam the backend every ~1 s. |
 
 ---
 
@@ -317,9 +332,31 @@ encoded as a POSIX TZ rule in `initNTP()`.
 
 | Function          | Description |
 |-------------------|-------------|
-| `checkUpdate()`   | Fetches the update manifest from `updateURL` (centralised in `core/board.h`), downloads/installs if a newer version exists, then reboots to apply. Guards the OTA window so `updateTick()` skips the other blocking fetches that cycle. |
-| `callback()`      | Progress callback — prints percentage and toggles the yellow LED. |
+| `checkUpdate()`   | Launches the OTA check/download in a **pinned task (core 0, prio 2)** and returns immediately so `loop()` keeps running. Guards the OTA window (`g_updating`) so `updateTick()` skips the other blocking fetches that cycle. |
+| `initOtaWatch()`  | Starts the **independent OTA watchdog task** (core 0): polls the OTA timers every 1 s and clean‑aborts a stalled download (`vTaskDelete` + `OTA\|TIMEOUT` Warning) even if `loop()` is itself frozen by OTA/MQTT TLS contention. This is the *primary* stall guard. |
+| `pump()`          | Secondary stall guard, called from `loop()` every cycle (enforces `OTA_STALL_MS`=90 s / `OTA_HARD_MS`=100 s). Redundant once the watchdog task is running. |
+| `callback()`      | Progress callback — prints percentage, toggles the yellow LED, and feeds the task WDT so a genuine (progressing) download stays alive. |
 | `errtext(code)`   | Human‑readable OTA result string. |
+
+> **Why the independent watchdog:** the original `pump()`-in-`loop()` backstop assumed `loop()` keeps cycling while the OTA downloads. But a stalled OTA download contends the WiFi/TLS stack with the MQTT socket and can **freeze `loop()` itself** — which previously let the OTA task hang until the 120 s `loopTask` task WDT reset (`Task watchdog got triggered`). With `loop()` dead, `pump()` never ran, so the abort never happened. The watchdog task (mirroring the I2C monitor pattern) is immune to that: it runs on its own and aborts the download cleanly.
+>
+> **Fix B (contention):** the OTA task is pinned to core 0 (off `loopTask`'s core 1), and `loop()` calls only `mqtt::mqttPump()` (keepalive) — not the full `mqttLoop()` reconnect path — while `ota::isUpdating()`, so the MQTT TLS socket can't wedge `loop()` during a download.
+
+### I²C bus hardening (`src/app/app.cpp`, `src/sunrise_i2c.cpp`)
+A wedged I²C bus (Sunrise holding SCL low) blocked `loop()` indefinitely because the ESP32 `Wire` library has **no software timeout**, tripping the task WDT. Fixes:
+
+- **Hardware timeout:** `i2c_set_timeout(I2C_NUM_0, 0xFFFF)` (max legal 16‑bit value) is armed once in `readValues()` and re‑armed after every `recoverI2cBus()`, so a stuck transaction aborts in ~0.8 ms instead of minutes.
+- **Internal pull‑ups:** `pinMode(SDA/SCL, INPUT_PULLUP)` is applied in `initSunrise()` and re‑applied after every `recoverI2cBus()` — without them the Sunrise repeated‑start reads wedge again (the test protoboard lacked external pull‑ups; production boards have them).
+- **Out‑of‑band monitor:** `initI2cWatch()` starts `i2cMonitorTask` (core 0) that seeds only after the first *successful* read, then force‑recovers at 75 s and reboots at 90 s of no successful read — well under the 120 s task WDT backstop.
+
+### `monitor.py` (serial observability)
+A local UART monitor that prepends a local `HH:MM:SS.mmm` timestamp to every line and **tees the last 40 lines** when it sees a WDT/reboot signature (`Task watchdog got triggered`, `abort() was called`, `Rebooting...`, `ets Jun`, `rst:`, `Guru Meditation`). Usage:
+```bash
+python3 monitor.py /dev/ttyUSB1 115200          # live, timestamped
+python3 monitor.py /dev/ttyUSB1 115200 | tee soak.log   # + log file
+```
+
+---
 
 > **Partition table:** the device ships with a per-device OTA partition layout
 > flashed at the factory; `platformio.ini` intentionally keeps
@@ -464,6 +501,15 @@ Brainstorm from a code review (2026‑07‑15), with current status.
 6. Hardcoded manifest URLs — **FIXED** (centralised in `core/board.h`).
 7. 4 CO₂ I²C reads per cycle, only 1 used for logic — *pending*. Consider
    lazy-reading telemetry-only values; `delay(100)` sits between BME/CO₂ reads.
+8. **I²C bus wedge** (no Wire timeout, stalled `loop()` → task WDT) — **FIXED**
+   (`i2c_set_timeout(0xFFFF)` + internal pull‑ups in `initSunrise()`/`recoverI2cBus()`
+   + out‑of‑band `i2cMonitorTask` recover@75 s / reboot@90 s).
+9. **OTA hang** (stalled HTTPS download wedged `loop()` → 120 s task WDT) —
+   **FIXED** (async OTA task pinned to core 0 + independent OTA watchdog task
+   `initOtaWatch()` clean‑aborts at 90/100 s; plus the `pump()` secondary guard and
+   the non‑persistent `ESP32OTAPull` HTTP timeout monkey‑patch).
+10. **Per‑loop config/schedule spam** (`fetchSchedule`/`fetchConfig` ran every
+    ~1 s) — **FIXED** (both now live inside the 10‑min `updateTick()` gate).
 
 ### C. Structure / maintainability
 8. Event bus is synchronous, no dedup/unsubscribe — *pending (optional)*. A

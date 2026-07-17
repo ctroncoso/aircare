@@ -28,12 +28,15 @@ inline unsigned long previousTimer_1 = 0;     // measurement cadence gate (app.c
 inline unsigned long previousTimer_2 = 0;     // update/fetch cadence gate (app.cpp)
 
 // Enable loop-stall debug markers ([DBG] >/< ...). Defined here so a single
-// switch controls all #ifdef DBG_WDT sites. Comment out / #undef to silence.
-// Currently disabled — the I2C hardening is in place and the loop no longer
-// hangs, so the per-cycle markers are just noise.
-// #define DBG_WDT
+// switch controls all #ifdef DBG_WDT sites. Turned ON for the OTA-stall
+// investigation so we can see which loop() step wedges.
+#define DBG_WDT
 
 // Enable I2C-only debug instrumentation (per-read timings, bus-recovery
 // notice). Defined separately from DBG_WDT so you can probe just the suspect
 // I2C path without the per-cycle loop markers. Uncomment to enable.
 #define DBG_I2C
+
+// Enable OTA-step debug markers + the async-OTA hard-timeout abort tracing.
+// ON while diagnosing the update-check wedge.
+#define DBG_OTA
