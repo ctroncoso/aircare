@@ -494,12 +494,16 @@ namespace mqtt
             }
             else
             {
-                // Only loop() when inbound data is pending (readByte can't spin).
-                if (espClient.available() > 0)
-                {
-                    client.loop();
-                    g_lastMqttTrafficMs = millis();
-                }
+                // Pump keepalive + process inbound every cycle. client.loop()
+                // sends the PINGREQ keepalive even when no inbound data is
+                // pending — gating it on available() (old code) suppressed the
+                // keepalive and the broker dropped the link every ~30s, causing
+                // the per-minute re-subscribe loop. A blocking readByte on a
+                // stale socket is now bounded by mqttWatchdogTask (kills+restarts
+                // this task if it fails to cycle within MQTT_TASK_WEDGE_MS), so
+                // calling loop() unconditionally is safe.
+                client.loop();
+                g_lastMqttTrafficMs = millis();
                 drainPubQueue();
                 g_lastReconnectAttempt = 0;
                 g_reconnectDelay = BACKOFF_BASE_MS;
