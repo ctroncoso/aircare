@@ -15,6 +15,7 @@
 namespace ota
 {
     bool g_updating = false;
+    bool g_otaTimedOut = false;
 
     // --- async OTA state -------------------------------------------------
     static TaskHandle_t g_otaTask = nullptr;
@@ -53,7 +54,13 @@ namespace ota
                     Serial.printf("[OTA] ABORT: %s (start=%lums lastProgress=%lums) — killing task\n",
                                   stalled ? "stalled" : "hard-timeout",
                                   now - g_otaStartMs, now - g_lastProgressMs);
-                    mqtt::publishWarning("OTA|TIMEOUT|Firmware download stalled — aborted");
+                    // WARNING: do NOT call mqtt::publishWarning() here. This task
+                    // runs on core 0 concurrently with loopTask, and PubSubClient
+                    // is NOT thread-safe — publishing from here corrupts the shared
+                    // TLS socket and wedges loopTask (seen: loopTask tripped the
+                    // 120s task WDT right after an OTA window). Raise a flag
+                    // instead; loopTask publishes the Warning next cycle.
+                    g_otaTimedOut = true;
                     vTaskDelete(g_otaTask); // free the wedged download task
                     g_otaTask = nullptr;
                     g_otaLaunched = false;
@@ -212,7 +219,9 @@ namespace ota
                 Serial.printf("[OTA] ABORT: %s (start=%lums lastProgress=%lums) — killing task\n",
                               stalled ? "stalled" : "hard-timeout",
                               now - g_otaStartMs, now - g_lastProgressMs);
-                mqtt::publishWarning("OTA|TIMEOUT|Firmware download stalled — aborted");
+                // pump() runs on loopTask, so publishing here is thread-safe — but
+                // raise the flag too so loop() emits a single coalesced Warning.
+                g_otaTimedOut = true;
                 vTaskDelete(g_otaTask); // free the wedged download task
                 g_otaTask = nullptr;
                 g_otaLaunched = false;
@@ -227,6 +236,19 @@ namespace ota
     }
 
     bool isUpdating() { return g_updating; }
+
+    bool otaTimedOut() { return g_otaTimedOut; }
+
+    // Called from loopTask (thread-safe) to emit the coalesced OTA-timeout
+    // Warning raised by the out-of-band watchdog, then clear the flag.
+    void publishOtaTimeoutWarning()
+    {
+        if (g_otaTimedOut)
+        {
+            mqtt::publishWarning("OTA|TIMEOUT|Firmware download stalled — aborted");
+            g_otaTimedOut = false;
+        }
+    }
 
     // Start the independent OTA watchdog task (Fix A). Call once from setup(),
     // after the first checkUpdate() is safe to launch. The task stays dormant

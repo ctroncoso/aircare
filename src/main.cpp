@@ -238,13 +238,21 @@ void loop()
   // While an OTA is in flight we do NOT touch the MQTT socket at all (Fix B+):
   // even mqttPump() -> client.loop() does a blocking recv() with no upper bound,
   // and a stalled/starved TLS socket during the download parks loopTask in recv()
-  // forever, tripping the 120s task WDT (seen: "Task watchdog got triggered" on
-  // loopTask right after "Checking update"). The OTA window is <=100s (watchdog
+  // forever, tripping the 120s task WDT. The OTA window is <=100s (watchdog
   // abort) vs a 30s keepalive, so a brief keepalive gap is harmless; the link is
   // re-pumped/reconnected the moment g_updating clears. The independent OTA
-  // watchdog still aborts a stuck download task itself.
-  if (!ota::isUpdating())
+  // watchdog still aborts a stuck download task itself — and raises a flag that
+  // we publish here (thread-safe) so loopTask, not the watchdog task, owns the
+  // non-thread-safe PubSubClient.
+  if (ota::isUpdating())
+  {
+      ota::publishOtaTimeoutWarning(); // no-op unless the watchdog flagged a stall
+  }
+  else
+  {
       mqtt::mqttLoop();
+      ota::publishOtaTimeoutWarning(); // flush any pending OTA-timeout Warning
+  }
   //-----------------
 
   // "Communication dead" watchdog: if the link looks alive enough to think

@@ -350,9 +350,14 @@ void updateTick()
 #ifdef DBG_WDT
         Serial.println("[DBG] updateTick");
 #endif
-        mqtt::mqttPump(); // keep keepalive alive across the blocking HTTP calls below
+        // While an OTA is in flight we keep loopTask COMPLETELY off the network:
+        // no mqttPump(), no schedule/config fetch. The OTA task owns the WiFi/TLS
+        // stack on core 0; any concurrent socket use from loopTask (core 1)
+        // corrupts the shared, non-thread-safe PubSubClient/TLS state and wedges
+        // loopTask (seen: loopTask tripped the 120s task WDT during an OTA window).
+        // The independent OTA watchdog aborts a stalled download; loopTask just
+        // stays clear until g_updating is cleared.
         ota::checkUpdate(); // async: launches a task, returns immediately
-        mqtt::mqttPump();
 
         // While an OTA is in flight the download task runs exclusively; skip the
         // other blocking fetches so the OTA is never interleaved with another
@@ -361,7 +366,7 @@ void updateTick()
         if (ota::g_updating)
         {
 #ifdef DBG_OTA
-            Serial.println("[APP] OTA in progress — skipping schedule/config fetch this cycle.");
+            Serial.println("[APP] OTA in progress — skipping MQTT pump + schedule/config fetch this cycle.");
 #endif
         }
         else
