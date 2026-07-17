@@ -65,6 +65,10 @@ namespace ota
                     g_otaTask = nullptr;
                     g_otaLaunched = false;
                     g_updating = false;      // loop() (if alive) resumes schedule/config
+                    // The TLS session has been idle for the whole download; tear it
+                    // so loopTask's next mqttLoop() reconnects cleanly instead of
+                    // blocking on a stale socket (would trip the loopTask WDT).
+                    mqtt::forceDisconnect();
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(1000)); // poll once per second
@@ -226,6 +230,9 @@ namespace ota
                 g_otaTask = nullptr;
                 g_otaLaunched = false;
                 g_updating = false; // loop() continues; schedule/config resume
+                // Tear the stale TLS session so the next mqttLoop() reconnects
+                // cleanly instead of blocking on a stale socket (loopTask WDT).
+                mqtt::forceDisconnect();
             }
         }
         else if (!g_otaLaunched && g_updating)

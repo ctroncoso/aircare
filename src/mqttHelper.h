@@ -20,6 +20,10 @@ namespace mqtt
     void subscribeCommands();
     void mqttLoop();
     void mqttPump();
+    // Tear down the MQTT socket unconditionally (used after an OTA window, when
+    // the TLS session has been idle/stale for the whole download, so the next
+    // mqttLoop() reconnects cleanly instead of risking a blocking read).
+    void forceDisconnect();
     // Returns the current backoff interval (ms) for the periodic reconnect,
     // growing exponentially with each failed attempt and capped. Call
     // mqttResetBackoff() after a successful connect.

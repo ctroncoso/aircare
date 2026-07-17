@@ -75,6 +75,52 @@ namespace mqtt
     // Called from mqttPublish() only on a genuine successful client.publish().
     inline void markPublishOk() { g_lastPublishOkMs = millis(); }
 
+    // --- stale-socket guard (fixes loopTask WDT during/after OTA) -----------
+    // PubSubClient::readByte() busy-waits on _client->available() and
+    // WiFiClientSecure::setTimeout() does NOT bound the TLS recv, so calling
+    // client.loop() on a socket that is "connected" but has no inbound data
+    // (e.g. a TLS session gone stale after a 90s OTA download) blocks loopTask
+    // in readPacket()/readByte() forever -> 120s task WDT reset. To avoid that
+    // we only ever call client.loop() when real inbound data is pending
+    // (espClient.available() > 0, a non-blocking check), and we force-tear the
+    // socket once it has been silent longer than the keepalive window so the
+    // next call takes the (bounded) reconnect branch instead of the blocking
+    // read. Keepalive PINGREQ is sent opportunistically whenever we do loop();
+    // if the socket goes silent we tear+reconnect rather than risk a blocking
+    // read.
+    static unsigned long g_lastMqttTrafficMs = 0; // last time client.loop() returned with a live link
+    static const unsigned long MQTT_STALE_MS = 45000; // > 30s keepalive; tear a silent socket
+
+    // Only safe to call client.loop() when inbound data is ready (non-blocking
+    // read) or the link is down (reconnect branch is bounded). Returns true when
+    // we should still attempt client.loop() this cycle.
+    static bool mqttCanLoop()
+    {
+        if (!client.connected())
+            return true; // reconnect branch — bounded connect(), no blocking read
+        if (millis() - g_lastMqttTrafficMs >= MQTT_STALE_MS)
+        {
+            // Socket "connected" but silent past keepalive -> it is stale/wedged.
+            // Tear it down so the next call reconnects cleanly instead of
+            // blocking in readPacket().
+            Serial.println("[MQTT] socket silent >keepalive — stopping stale link");
+            espClient.stop();
+            return true; // now !connected -> reconnect branch
+        }
+        // Connected and recently live: only loop() if there is actual inbound
+        // data to process. This guarantees readByte() never spins on an empty
+        // socket. (Keepalive PINGREQ is covered when data arrives or on the
+        // next stale-teardown.)
+        return espClient.available() > 0;
+    }
+
+    // Mark the link as having had traffic this cycle (so the stale timer resets).
+    static void mqttMarkTraffic()
+    {
+        if (client.connected())
+            g_lastMqttTrafficMs = millis();
+    }
+
     // True when no publish has succeeded for COMMS_DEAD_MS despite WiFi being
     // associated. Returns false if WiFi itself is down (let the network recover
     // rather than rebooting into the same outage).
@@ -274,6 +320,7 @@ namespace mqtt
             if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS))
             {
                 Serial.println("connected");
+                g_lastMqttTrafficMs = millis(); // reset stale timer on boot connect
                 break;
             }
             Serial.printf("failed, rc=%d\n", client.state());
@@ -343,7 +390,14 @@ namespace mqtt
     static unsigned long g_reconnectDelay = BACKOFF_BASE_MS; // grows on repeated failures
     void mqttLoop()
     {
-        client.loop(); // keepalive + inbound
+        // Gate client.loop() so it never blocks on a stale/empty TLS socket
+        // (see mqttCanLoop). Only the bounded reconnect branch or a read with
+        // pending inbound data is ever executed here.
+        if (mqttCanLoop())
+        {
+            client.loop(); // keepalive + inbound (safe: data pending or reconnecting)
+            mqttMarkTraffic();
+        }
         bool connected = client.connected();
         if (!connected)
         {
@@ -357,6 +411,10 @@ namespace mqtt
                 {
                     g_backoffStep++;
                     g_reconnectDelay = mqttBackoffInterval();
+                }
+                else
+                {
+                    g_lastMqttTrafficMs = millis(); // reset stale timer on (re)connect
                 }
             }
         }
@@ -374,9 +432,21 @@ namespace mqtt
     // Pump the MQTT client without attempting reconnects — used during blocking
     // waits in setup() (sensor init, HTTP fetches) so the keepalive PINGREQ is
     // sent and the broker doesn't drop the idle socket. Does NOT call connect().
+    // Gated the same way as mqttLoop() so it can never block loopTask.
     void mqttPump()
     {
-        client.loop();
+        if (mqttCanLoop())
+        {
+            client.loop();
+            mqttMarkTraffic();
+        }
+    }
+
+    // Tear down the MQTT socket unconditionally (see header).
+    void forceDisconnect()
+    {
+        espClient.stop();
+        client.disconnect();
     }
 
     // Publishes to the broker. If the link is down, telemetry destined for the
@@ -387,7 +457,11 @@ namespace mqtt
     {
         if (client.connected())
         {
-            if (client.publish(mq_path, content)) markPublishOk();
+            if (client.publish(mq_path, content))
+            {
+                markPublishOk();
+                g_lastMqttTrafficMs = millis(); // outbound traffic keeps link alive
+            }
             return;
         }
         if (strcmp(mq_path, "cleanair/sensor") == 0)
