@@ -235,14 +235,15 @@ void loop()
   // and reconnects on a fixed 15s cadence if the link drops. No separate thread
   // is used — PubSubClient is not thread-safe; the main loop is the standard
   // ESP32 MQTT pattern.
-  // While an OTA is in flight we only pump the keepalive (Fix B): a full
-  // mqttLoop() may block on the MQTT TLS socket that is contending the WiFi
-  // stack with the OTA download task, which previously froze loop() entirely
-  // and defeated the OTA backstop. The independent OTA watchdog still aborts a
-  // stuck download; we just don't let the MQTT reconnect path wedge loop().
-  if (ota::isUpdating())
-      mqtt::mqttPump();
-  else
+  // While an OTA is in flight we do NOT touch the MQTT socket at all (Fix B+):
+  // even mqttPump() -> client.loop() does a blocking recv() with no upper bound,
+  // and a stalled/starved TLS socket during the download parks loopTask in recv()
+  // forever, tripping the 120s task WDT (seen: "Task watchdog got triggered" on
+  // loopTask right after "Checking update"). The OTA window is <=100s (watchdog
+  // abort) vs a 30s keepalive, so a brief keepalive gap is harmless; the link is
+  // re-pumped/reconnected the moment g_updating clears. The independent OTA
+  // watchdog still aborts a stuck download task itself.
+  if (!ota::isUpdating())
       mqtt::mqttLoop();
   //-----------------
 

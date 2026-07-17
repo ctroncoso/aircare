@@ -29,6 +29,12 @@ namespace mqtt
     {
         espClient.stop();
         espClient.setInsecure();
+        // Hard recv timeout so client.loop()'s blocking recv() always returns
+        // within ~2s. Without this, a stalled/starved TLS socket (e.g. while an
+        // OTA download hammers the WiFi stack on the other core) parks loopTask
+        // in recv() forever and trips the 120s task WDT. Re-applied after every
+        // stop() since stop() clears socket options.
+        espClient.setTimeout(2000);
     }
 
     // Exponential backoff state for the periodic reconnect in loop() and at
