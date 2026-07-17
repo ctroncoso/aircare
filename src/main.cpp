@@ -250,16 +250,22 @@ void loop()
   ota::publishOtaTimeoutWarning(); // no-op unless the OTA watchdog flagged a stall
   //-----------------
 
-  // "Communication dead" watchdog: if the link looks alive enough to think
-  // it's fine yet no publish has actually succeeded for 60 min (a wedged TLS
-  // session that reconnect-backoff can't clear) while WiFi is still up, force
-  // a reboot so the socket/TLS state is rebuilt. A network outage alone won't
-  // trip this — commsIsDead() only fires when WiFi is associated.
+  // "Communication dead" liveness check. This used to force an autonomous
+  // reboot after 60 min with no successful publish — but that produced the
+  // hourly Watchdog resets (the mqttTask's own watchdog already recovers a
+  // wedged/stuck TLS session without a reboot). We now only surface the
+  // condition and nudge the MQTT task to tear+rebuild its socket, so the
+  // device stays up. A real, unrecoverable comms loss is better handled by
+  // the mqttWatchdogTask recreating the task than by a full reset.
   if (mqtt::commsIsDead())
   {
-    mqtt::publishEvent(ERROR, "MCU|COMMS_DEAD|No successful publish in 60 min — rebooting");
-    delay(2000); // best-effort: let the event flush via keepalive before restart
-    ESP.restart();
+    static unsigned long lastCommsDeadWarn = 0;
+    if (millis() - lastCommsDeadWarn >= 600000UL) // warn at most every 10 min
+    {
+      lastCommsDeadWarn = millis();
+      mqtt::publishEvent(WARNING, "MCU|COMMS_DEAD|No successful publish in 60 min — nudging MQTT socket");
+      mqtt::forceDisconnect(); // signal mqttTask to rebuild the TLS session
+    }
   }
 }
 
