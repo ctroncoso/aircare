@@ -6,7 +6,7 @@
 
 // ---- build / version ----
 #define SEALEVELPRESSURE_HPA (1013.25)
-#define PROGRAM_VERSION "1.1.20"
+#define PROGRAM_VERSION "1.1.21"
 // #define DEBUG
 #define CO2_LOW (700)
 #define CO2_HIGH (800)

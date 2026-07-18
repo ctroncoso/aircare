@@ -30,13 +30,13 @@ inline unsigned long previousTimer_2 = 0;     // update/fetch cadence gate (app.
 // Enable loop-stall debug markers ([DBG] >/< ...). Defined here so a single
 // switch controls all #ifdef DBG_WDT sites. Turned ON for the OTA-stall
 // investigation so we can see which loop() step wedges.
-#define DBG_WDT
+// #define DBG_WDT
 
 // Enable I2C-only debug instrumentation (per-read timings, bus-recovery
 // notice). Defined separately from DBG_WDT so you can probe just the suspect
 // I2C path without the per-cycle loop markers. Uncomment to enable.
-#define DBG_I2C
+// #define DBG_I2C
 
 // Enable OTA-step debug markers + the async-OTA hard-timeout abort tracing.
 // ON while diagnosing the update-check wedge.
-#define DBG_OTA
+// #define DBG_OTA
