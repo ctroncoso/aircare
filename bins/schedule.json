@@ -16,13 +16,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "A8:42:E3:AB:10:88",
@@ -40,13 +34,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "A8:42:E3:AB:6F:40",
@@ -64,13 +52,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "C8:F0:9E:9E:C6:6C",
@@ -88,13 +70,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "A8:42:E3:AB:1E:04",
@@ -112,13 +88,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "A0:A3:B3:96:EF:F0",
@@ -136,13 +106,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "A8:42:E3:AB:70:BC",
@@ -160,13 +124,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     },
     {
       "Device": "C8:F0:9E:9E:38:40",
@@ -184,13 +142,7 @@
           ]
         ]
       },
-      "Exceptions": [
-        {
-          "from": "2026-07-16",
-          "to": "2026-07-17",
-          "state": "off"
-        }
-      ]
+      "Exceptions": []
     }
   ]
 }
